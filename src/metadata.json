@@ -1,0 +1,17 @@
+{
+  "uuid": "dynamic-wallpaper@eusebiuxii.com",
+  "name": "Dynamic Wallpaper",
+  "description": "Changes your wallpaper at sunrise and sunset, or at times you choose. Optional sunrise and sunset wallpapers, and it can switch between light and dark style too.",
+  "version-name": "0.1.0",
+  "shell-version": [
+    "49",
+    "50",
+    "51"
+  ],
+  "session-modes": [
+    "user",
+    "unlock-dialog"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.dynamic-wallpaper",
+  "url": "https://github.com/eusebiuxii/dynamic-wallpaper-gnome-extension"
+}

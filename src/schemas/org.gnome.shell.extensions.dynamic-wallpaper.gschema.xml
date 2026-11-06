@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.dynamic-wallpaper"
+          path="/org/gnome/shell/extensions/dynamic-wallpaper/">
+
+    <!-- When to change -->
+    <key name="mode" type="s">
+      <choices>
+        <choice value="sun"/>
+        <choice value="fixed"/>
+      </choices>
+      <default>'sun'</default>
+      <summary>What decides when the wallpaper changes</summary>
+      <description>'sun' follows sunrise and sunset at your location; 'fixed' uses day-start and night-start.</description>
+    </key>
+
+    <key name="latitude" type="d">
+      <range min="-90" max="90"/>
+      <default>51.5074</default>
+      <summary>Latitude in degrees, north positive</summary>
+    </key>
+    <key name="longitude" type="d">
+      <range min="-180" max="180"/>
+      <default>-0.1278</default>
+      <summary>Longitude in degrees, east positive</summary>
+    </key>
+    <key name="location-name" type="s">
+      <default>'London, United Kingdom'</default>
+      <summary>Name of the chosen place, shown in the settings</summary>
+    </key>
+
+    <key name="day-start" type="i">
+      <range min="0" max="1439"/>
+      <default>420</default>
+      <summary>When day starts in 'fixed' mode, in minutes after midnight</summary>
+    </key>
+    <key name="night-start" type="i">
+      <range min="0" max="1439"/>
+      <default>1200</default>
+      <summary>When night starts in 'fixed' mode, in minutes after midnight</summary>
+    </key>
+
+    <!-- Wallpapers (file URIs, empty when not set) -->
+    <key name="wallpaper-day" type="s">
+      <default>''</default>
+      <summary>Day wallpaper</summary>
+    </key>
+    <key name="wallpaper-night" type="s">
+      <default>''</default>
+      <summary>Night wallpaper</summary>
+    </key>
+    <key name="wallpaper-sunrise" type="s">
+      <default>''</default>
+      <summary>Sunrise wallpaper (falls back to the day one)</summary>
+    </key>
+    <key name="wallpaper-sunset" type="s">
+      <default>''</default>
+      <summary>Sunset wallpaper (falls back to the day one)</summary>
+    </key>
+
+    <key name="use-transitions" type="b">
+      <default>false</default>
+      <summary>Show sunrise and sunset wallpapers</summary>
+    </key>
+    <key name="transition-minutes" type="i">
+      <range min="5" max="240"/>
+      <default>60</default>
+      <summary>How long the sunrise and sunset wallpapers show</summary>
+    </key>
+
+    <!-- Style -->
+    <key name="switch-style" type="b">
+      <default>false</default>
+      <summary>Also switch between light and dark style</summary>
+      <description>Light style during the day, dark at night. Off leaves the style alone.</description>
+    </key>
+  </schema>
+</schemalist>

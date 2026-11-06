@@ -1,0 +1,4 @@
+dist/
+src/schemas/gschemas.compiled
+backup-wallpaper-settings.dconf
+CLAUDE.local.md
