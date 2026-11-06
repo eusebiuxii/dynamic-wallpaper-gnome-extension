@@ -4,8 +4,8 @@ A GNOME Shell extension that changes your wallpaper through the day:
 
 - **Day and night wallpapers**, switched at **sunrise and sunset** for your
   location, or at **times you choose**.
-- Optional **sunrise and sunset wallpapers** shown for a while at the start
-  and end of the day (an hour by default).
+- Optional **sunrise and sunset wallpapers**, starting at dawn and ending
+  at dusk (an hour each by default).
 - Find your location by **searching for a city** (works offline, using the
   same list as GNOME Weather), or type in the coordinates.
 - Optionally **switch between light and dark style** along with the

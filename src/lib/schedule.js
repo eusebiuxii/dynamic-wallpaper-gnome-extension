@@ -18,15 +18,18 @@ export const Phase = Object.freeze({
 const MINUTE = 60_000;
 
 /**
- * Turns one day's "light starts" and "dark starts" moments into a list of
- * phase changes.
+ * Turns one day's boundaries (see boundariesForDay) into a list of phase
+ * changes.
+ *
+ * Without transitions, day runs from sunrise to sunset.
  *
  * With transitions on, the sunrise wallpaper shows for `transitionMinutes`
- * starting at sunrise, and the sunset wallpaper for `transitionMinutes`
- * ending at sunset, so the evening one is up while it's still light. If the
- * day is too short for both, they share it half each.
+ * starting at dawn, and the sunset wallpaper for `transitionMinutes` ending
+ * at dusk. Where there's no dawn or dusk (set times, or summer far north
+ * where it never gets dark) sunrise and sunset are used instead. If the day
+ * is too short for both, they share it half each.
  */
-function eventsForDay(lightStart, darkStart, transitions, transitionMinutes) {
+function eventsForDay({lightStart, darkStart, dawn, dusk}, transitions, transitionMinutes) {
     if (!transitions) {
         return [
             {time: lightStart, phase: Phase.DAY},
@@ -34,16 +37,16 @@ function eventsForDay(lightStart, darkStart, transitions, transitionMinutes) {
         ];
     }
 
+    const start = (dawn ?? lightStart).getTime();
+    const end = (dusk ?? darkStart).getTime();
+    const middle = (start + end) / 2;
     const length = transitionMinutes * MINUTE;
-    const middle = new Date((lightStart.getTime() + darkStart.getTime()) / 2);
-    const sunriseEnds = new Date(Math.min(lightStart.getTime() + length, middle.getTime()));
-    const sunsetStarts = new Date(Math.max(darkStart.getTime() - length, middle.getTime()));
 
     const events = [
-        {time: lightStart, phase: Phase.SUNRISE},
-        {time: sunriseEnds, phase: Phase.DAY},
-        {time: sunsetStarts, phase: Phase.SUNSET},
-        {time: darkStart, phase: Phase.NIGHT},
+        {time: new Date(start), phase: Phase.SUNRISE},
+        {time: new Date(Math.min(start + length, middle)), phase: Phase.DAY},
+        {time: new Date(Math.max(end - length, middle)), phase: Phase.SUNSET},
+        {time: new Date(end), phase: Phase.NIGHT},
     ];
     // On short days the day phase can end up zero minutes long; drop any
     // phase that ends the moment it starts.
@@ -63,9 +66,12 @@ function atMinutes(day, minutes) {
 }
 
 /**
- * The light/dark boundaries for one day.
+ * The light/dark boundaries for one day: sunrise and sunset (lightStart,
+ * darkStart) and civil dawn and dusk. Set times have no twilight, so there
+ * dawn and dusk are null.
  *
- * @returns {{lightStart: Date, darkStart: Date} | {polar: string, day: Date}}
+ * @returns {{lightStart: Date, darkStart: Date, dawn: ?Date, dusk: ?Date} |
+ *     {polar: string, day: Date}}
  */
 export function boundariesForDay(day, config) {
     if (config.mode === 'fixed') {
@@ -75,13 +81,13 @@ export function boundariesForDay(day, config) {
         // midnight, i.e. on the next calendar day.
         if (darkStart <= lightStart)
             darkStart = atMinutes(startOfDay(day, 1), config.nightStart);
-        return {lightStart, darkStart};
+        return {lightStart, darkStart, dawn: null, dusk: null};
     }
 
     const sun = getSunTimes(day, config.latitude, config.longitude);
     if (sun.polar)
         return {polar: sun.polar, day: startOfDay(day)};
-    return {lightStart: sun.sunrise, darkStart: sun.sunset};
+    return {lightStart: sun.sunrise, darkStart: sun.sunset, dawn: sun.dawn, dusk: sun.dusk};
 }
 
 /**
@@ -99,7 +105,7 @@ function eventsAround(now, config) {
             events.push({time: b.day, phase: b.polar === 'day' ? Phase.DAY : Phase.NIGHT});
             continue;
         }
-        events.push(...eventsForDay(b.lightStart, b.darkStart,
+        events.push(...eventsForDay(b,
             config.transitions, config.transitionMinutes));
     }
     return events.sort((a, b) => a.time - b.time);
@@ -147,7 +153,7 @@ export function getTodaysEvents(now, config) {
     if (b.polar)
         return {polar: b.polar, events: []};
 
-    const events = eventsForDay(b.lightStart, b.darkStart,
+    const events = eventsForDay(b,
         config.transitions, config.transitionMinutes)
         .filter(e => e.time >= today && e.time < tomorrow);
     return {polar: null, events};

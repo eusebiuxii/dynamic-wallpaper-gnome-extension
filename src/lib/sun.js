@@ -17,6 +17,10 @@ const J2000 = 2_451_545.0; // Julian date of 2000-01-01 12:00 UTC
 // atmosphere bending its light.
 const SUN_ALTITUDE = -0.833;
 
+// Civil dawn and dusk: the sun 6° below the horizon. Before dawn and after
+// dusk it's properly dark; between them and sunrise/sunset is twilight.
+const CIVIL_TWILIGHT_ALTITUDE = -6;
+
 const toRad = deg => (deg * Math.PI) / 180;
 const toDeg = rad => (rad * 180) / Math.PI;
 
@@ -51,11 +55,24 @@ function solarDay(n, longitude) {
 }
 
 /**
- * Sunrise and sunset for the local calendar day containing `date`.
+ * Cosine of the hour angle at which the sun is at `altitude` degrees. Below
+ * -1 it never gets that low that day; above 1 it never gets that high.
+ */
+function cosHourAngle(altitude, latitude, declination) {
+    const phi = toRad(latitude);
+    return (Math.sin(toRad(altitude)) - Math.sin(phi) * Math.sin(declination)) /
+        (Math.cos(phi) * Math.cos(declination));
+}
+
+/**
+ * Sunrise, sunset, dawn and dusk for the local calendar day containing
+ * `date`.
  *
- * Returns `{sunrise, sunset}` as Date objects. Near the poles the sun can
- * stay up or down all day; then both are null and `polar` is 'day' or
- * 'night'.
+ * Returns `{dawn, sunrise, sunset, dusk}` as Date objects. Dawn and dusk are
+ * civil twilight (sun 6° below the horizon). In summer far north the sky
+ * never gets that dark, so dawn and dusk are null even though the sun sets.
+ * Near the poles the sun can stay up or down all day; then everything is
+ * null and `polar` is 'day' or 'night'.
  *
  * @param {Date} date any moment on the day you want
  * @param {number} latitude degrees, north positive
@@ -79,20 +96,26 @@ export function getSunTimes(date, latitude, longitude) {
         }
     }
 
-    const phi = toRad(latitude);
-    const cosHourAngle =
-        (Math.sin(toRad(SUN_ALTITUDE)) - Math.sin(phi) * Math.sin(day.declination)) /
-        (Math.cos(phi) * Math.cos(day.declination));
+    const none = {dawn: null, sunrise: null, sunset: null, dusk: null};
+    const cosSun = cosHourAngle(SUN_ALTITUDE, latitude, day.declination);
+    if (cosSun < -1)
+        return {...none, polar: 'day'}; // midnight sun
+    if (cosSun > 1)
+        return {...none, polar: 'night'}; // polar night
 
-    if (cosHourAngle < -1)
-        return {sunrise: null, sunset: null, polar: 'day'}; // midnight sun
-    if (cosHourAngle > 1)
-        return {sunrise: null, sunset: null, polar: 'night'}; // polar night
-
-    const hourAngle = toDeg(Math.acos(cosHourAngle)) / 360; // in days
-    return {
+    const hourAngle = toDeg(Math.acos(cosSun)) / 360; // in days
+    const result = {
+        ...none,
         sunrise: julianToDate(day.transit - hourAngle),
         sunset: julianToDate(day.transit + hourAngle),
         polar: null,
     };
+
+    const cosTwilight = cosHourAngle(CIVIL_TWILIGHT_ALTITUDE, latitude, day.declination);
+    if (cosTwilight >= -1) {
+        const twilightAngle = toDeg(Math.acos(cosTwilight)) / 360;
+        result.dawn = julianToDate(day.transit - twilightAngle);
+        result.dusk = julianToDate(day.transit + twilightAngle);
+    }
+    return result;
 }

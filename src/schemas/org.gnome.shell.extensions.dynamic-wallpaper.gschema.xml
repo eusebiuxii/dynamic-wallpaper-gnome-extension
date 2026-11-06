@@ -66,6 +66,7 @@
       <range min="5" max="240"/>
       <default>60</default>
       <summary>How long the sunrise and sunset wallpapers show</summary>
+      <description>The sunrise wallpaper starts at dawn, the sunset one ends at dusk.</description>
     </key>
 
     <!-- Style -->

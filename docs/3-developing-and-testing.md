@@ -31,7 +31,7 @@ To add a test, open `tests/schedule.test.js` and copy one:
 
 ```js
 test('what it should do', () => {
-    assertEqual(getPhase(at(7, 30), fixedWithTransitions).phase, Phase.SUNRISE);
+    assertEqual(getPhase(at(7, 0), fixedWithTransitions).phase, Phase.SUNRISE);
 });
 ```
 

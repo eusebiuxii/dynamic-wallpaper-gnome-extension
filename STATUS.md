@@ -9,13 +9,14 @@ Where the project is up to. Last updated 2026-11-06.
   `dynamic-wallpaper@eusebiuxii.com`.
 - Features:
   - day/night wallpapers, switched at sunrise/sunset or at set times;
-  - optional sunrise/sunset wallpapers (default 60 min);
+  - optional sunrise/sunset wallpapers: N minutes from dawn, and N minutes
+    up to dusk (civil twilight, default N = 60);
   - city search (offline, libgweather) or coordinates by hand;
   - optional light/dark style switch, off by default;
   - keeps running on the lock screen (`unlock-dialog`);
   - re-checks on wake from sleep;
   - only changes the wallpaper when the phase changes.
-- Tests: `make test`, 14 passing in several time zones. Sun times are
+- Tests: `make test`, 19 passing in several time zones. Sun times are
   within 1–3 minutes of published values.
 - Settings window checked with `make prefs` and screenshots (both pages,
   city search, set-times mode).

@@ -14,12 +14,15 @@ GNOME imports, so they can be tested on their own.
                 lib/schedule.js  →  lib/sun.js
 ```
 
-## lib/sun.js: sunrise and sunset
+## lib/sun.js: sunrise, sunset, dawn and dusk
 
-`getSunTimes(date, latitude, longitude)` returns that day's sunrise and
-sunset as `Date` objects. It uses the standard "sunrise equation", accurate
-to a minute or two. Near the poles the sun may not rise or set at all; then
-it returns `polar: 'day'` or `polar: 'night'` instead.
+`getSunTimes(date, latitude, longitude)` returns that day's dawn, sunrise,
+sunset and dusk as `Date` objects. Dawn and dusk are civil twilight: the sun
+6° below the horizon, roughly when it's light enough to see outside. It uses
+the standard "sunrise equation", accurate to a minute or two. Near the poles
+the sun may not rise or set at all; then it returns `polar: 'day'` or
+`polar: 'night'` instead. In summer far north the sun sets but the sky never
+gets that dark; then dawn and dusk are `null`.
 
 ## lib/schedule.js: which wallpaper, and until when
 
@@ -33,10 +36,11 @@ The day is split into four **phases**: night, sunrise, day, sunset.
 How it works:
 
 1. For each day from two days ago to two days ahead, it works out when light
-   starts and dark starts: sunrise and sunset in sun mode, or your two times
-   in set-times mode.
-2. It turns those into a list of changes, e.g. "07:02 sunrise → 08:02 day →
-   15:32 sunset → 16:32 night".
+   starts and dark starts: dawn, sunrise, sunset and dusk in sun mode, or
+   your two times in set-times mode.
+2. It turns those into a list of changes, e.g. "06:26 sunrise → 07:26 day →
+   16:01 sunset → 17:01 night" (London in November: dawn 06:26, dusk 17:01,
+   with 60 minutes).
 3. The current phase is the last change before now, and the next change is
    the first one after now.
 
@@ -46,10 +50,18 @@ that start after midnight, and time zones far from Greenwich.
 
 With sunrise and sunset wallpapers on:
 
-- the **sunrise** wallpaper shows from sunrise, for the chosen time;
-- the **sunset** wallpaper shows in the time **before** sunset, while it's
-  still light;
+- the **sunrise** wallpaper shows for the chosen time, starting at **dawn**;
+- the **sunset** wallpaper shows for the chosen time, ending at **dusk**;
+- where there's no dawn or dusk (set times, or far north in summer when it
+  never gets dark), sunrise and sunset are used instead: "Day starts" and
+  "Night starts" in set-times mode;
 - if the day is too short for both, they split it half each.
+
+Without sunrise and sunset wallpapers, day and night switch at sunrise and
+sunset.
+
+With the style switch on, dark style starts when the night wallpaper does,
+i.e. at dusk.
 
 `wallpaperForPhase()` picks the image. A missing sunrise or sunset image
 falls back to the day one.

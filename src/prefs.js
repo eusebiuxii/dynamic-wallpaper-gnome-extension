@@ -83,8 +83,8 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         const transitions = new Adw.PreferencesGroup({
             title: 'Sunrise and sunset',
             description: 'Optional extra wallpapers for the start and end of the day. ' +
-                'The sunrise one shows from sunrise; the sunset one shows in the time ' +
-                'just before sunset. Leave one empty to use the day wallpaper.',
+                'The sunrise one starts at dawn; the sunset one ends at dusk. ' +
+                'Leave one empty to use the day wallpaper.',
         });
         const toggle = new Adw.SwitchRow({title: 'Use sunrise and sunset wallpapers'});
         settings.bind('use-transitions', toggle, 'active', Gio.SettingsBindFlags.DEFAULT);
@@ -277,7 +277,8 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         const group = new Adw.PreferencesGroup({
             title: 'Set times',
             description: 'With sunrise and sunset wallpapers on, the sunrise one shows ' +
-                'from "Day starts" and the sunset one in the time before "Night starts".',
+                'from "Day starts" and the sunset one in the time before "Night starts" ' +
+                '(set times have no dawn or dusk).',
         });
         group.add(this._timeRow(settings, 'day-start', 'Day starts'));
         group.add(this._timeRow(settings, 'night-start', 'Night starts'));
