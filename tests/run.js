@@ -9,5 +9,7 @@ print('\nschedule.js');
 await import('./schedule.test.js');
 print('\nslideshow.js');
 await import('./slideshow.test.js');
+print('\ndynamicSet.js');
+await import('./dynamicSet.test.js');
 
 System.exit(summary() ? 0 : 1);

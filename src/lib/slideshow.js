@@ -52,8 +52,16 @@ export function planSlideshow(now, config, files, fadeSeconds) {
         return null;
     const wallpapers = {...files, day, night};
 
-    const {start, segments} = getCycle(now, config);
+    return planFromCycle(getCycle(now, config),
+        phase => wallpaperForPhase(phase, wallpapers), fadeSeconds);
+}
 
+/**
+ * The general version of planSlideshow(): turns any 24-hour cycle (see
+ * cycleFromEvents() in schedule.js) into slides. `fileFor(phase)` gives the
+ * picture for each phase.
+ */
+export function planFromCycle({start, segments}, fileFor, fadeSeconds) {
     // Whole seconds from the start, so the pieces add up to exactly a day.
     const startMs = Math.floor(start.getTime() / 1000) * 1000;
     const offset = date => Math.min(DAY_SECONDS,
@@ -63,7 +71,7 @@ export function planSlideshow(now, config, files, fadeSeconds) {
     // own shows the day one) become one piece.
     const pieces = [];
     for (const segment of segments) {
-        const file = wallpaperForPhase(segment.phase, wallpapers);
+        const file = fileFor(segment.phase);
         const last = pieces[pieces.length - 1];
         if (last && last.file === file)
             last.end = offset(segment.end);

@@ -10,6 +10,9 @@ A GNOME Shell extension that changes your wallpaper through the day:
   default). The right wallpaper shows from the moment you log in.
 - Find your location by **searching for a city** (works offline, using the
   same list as GNOME Weather), or type in the coordinates.
+- A **Dynamic set** tab for any number of pictures (8, 16, 24…) placed
+  around a 24-hour clock, by time of day or by the sun's position (so they
+  follow the seasons). See [docs/5](docs/5-dynamic-set.md).
 - Optionally **switch between light and dark style** along with the
   wallpaper. Leave it off to keep your style and only change the wallpaper.
 
@@ -24,9 +27,11 @@ src/                     the extension itself (this folder is what gets installe
   metadata.json          name, ID, supported GNOME versions
   extension.js           runs inside GNOME Shell and changes the wallpaper
   prefs.js               the settings window
+  dynamicSetPage.js      the settings window's Dynamic set tab (the clock)
   lib/sun.js             sunrise and sunset maths
   lib/schedule.js        decides which wallpaper should show, and when
   lib/slideshow.js       writes that as a slideshow GNOME times by itself
+  lib/dynamicSet.js      scheduling for the dynamic set (many pictures)
   schemas/*.gschema.xml  the settings the extension stores
 tests/                   tests and a settings-window preview tool
 docs/                    guides to how GNOME extensions work (start here)
@@ -56,6 +61,8 @@ New to GNOME extensions? Read these in order:
    running it, seeing errors, testing changes without logging out.
 4. [Building and releasing](docs/4-building-and-releasing.md):
    packing a zip, publishing on extensions.gnome.org, and updates.
+5. [The dynamic set](docs/5-dynamic-set.md): the Dynamic set tab, what it
+   does and how it works.
 
 ## Licence
 

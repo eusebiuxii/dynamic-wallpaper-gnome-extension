@@ -47,7 +47,7 @@ unlink:
 
 pack: test
 	mkdir -p dist
-	gnome-extensions pack src --extra-source=lib --out-dir=dist --force
+	gnome-extensions pack src --extra-source=lib --extra-source=dynamicSetPage.js --out-dir=dist --force
 	@echo "Built $(ZIP)"
 
 install: pack

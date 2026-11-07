@@ -6,6 +6,9 @@
 //   gjs -m tests/prefs-window.js --page schedule       start on a page
 //   gjs -m tests/prefs-window.js --set use-transitions=true
 //   gjs -m tests/prefs-window.js --search london       type into the city search
+//   gjs -m tests/prefs-window.js --page dynamic-set --select 0   select a picture
+//   gjs -m tests/prefs-window.js --size 660x1300       window size
+//   gjs -m tests/prefs-window.js --scroll-end          scroll to the bottom of the page
 //   gjs -m tests/prefs-window.js --screenshot out.png  save a picture and quit
 //
 // Settings live in memory only (GSETTINGS_BACKEND=memory, set by `make
@@ -28,13 +31,16 @@ metadata.dir = srcDir;
 metadata.path = srcDir.get_path();
 
 // Parse arguments.
-let page = null, screenshot = null, search = null;
+let page = null, screenshot = null, search = null, select = null, size = null, scrollEnd = false;
 const presets = [];
 for (let i = 0; i < ARGV.length; i++) {
     if (ARGV[i] === '--page') page = ARGV[++i];
     else if (ARGV[i] === '--screenshot') screenshot = ARGV[++i];
     else if (ARGV[i] === '--set') presets.push(ARGV[++i]);
     else if (ARGV[i] === '--search') search = ARGV[++i];
+    else if (ARGV[i] === '--select') select = Number(ARGV[++i]);
+    else if (ARGV[i] === '--size') size = ARGV[++i].split('x').map(Number);
+    else if (ARGV[i] === '--scroll-end') scrollEnd = true;
 }
 
 const {default: Preferences} = await import('../src/prefs.js');
@@ -53,6 +59,8 @@ const app = new Adw.Application({application_id: 'com.eusebiuxii.DynamicWallpape
 app.connect('activate', () => {
     const window = new Adw.PreferencesWindow({application: app, title: metadata.name});
     prefs.fillPreferencesWindow(window);
+    if (size)
+        window.set_default_size(...size);
     if (page)
         window.set_visible_page_name(page);
     if (search) {
@@ -69,10 +77,29 @@ app.connect('activate', () => {
         };
         find(window.get_visible_page())?.set_text(search);
     }
+    if (select !== null)
+        window.get_visible_page()._clock?.select(select);
     window.present();
 
     if (screenshot) {
         // Give it a moment to lay out and load thumbnails, then save.
+        if (scrollEnd) {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 700, () => {
+                const findScroll = widget => {
+                    if (widget instanceof Gtk.ScrolledWindow)
+                        return widget;
+                    for (let c = widget.get_first_child(); c; c = c.get_next_sibling()) {
+                        const found = findScroll(c);
+                        if (found)
+                            return found;
+                    }
+                    return null;
+                };
+                const adj = findScroll(window.get_visible_page())?.get_vadjustment();
+                adj?.set_value(adj.get_upper());
+                return GLib.SOURCE_REMOVE;
+            });
+        }
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
             const paintable = new Gtk.WidgetPaintable({widget: window});
             const snapshot = Gtk.Snapshot.new();

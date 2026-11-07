@@ -16,7 +16,9 @@ import GWeather from 'gi://GWeather?version=4.0';
 
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import {getTodaysEvents, getPhase, Phase} from './lib/schedule.js';
+import {getTodaysEvents, getPhase, Phase, startOfDay, wallpaperForPhase} from './lib/schedule.js';
+import {entryTimes, labelText, parseEntries, setEvents} from './lib/dynamicSet.js';
+import {buildDynamicSetPage} from './dynamicSetPage.js';
 
 const PHASE_LABELS = {
     [Phase.NIGHT]: 'Night',
@@ -47,7 +49,7 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         const settings = this.getSettings();
         // Keep the settings object alive as long as the window is open.
         window._settings = settings;
-        window.set_default_size(640, 780);
+        window.set_default_size(660, 860);
 
         // Every settings listener goes through watch(), so they can all be
         // disconnected when the window closes.
@@ -60,6 +62,7 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         });
 
         window.add(this._buildWallpapersPage(window, settings));
+        window.add(buildDynamicSetPage(window, settings, this._watch));
         window.add(this._buildSchedulePage(settings));
     }
 
@@ -71,6 +74,15 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
             title: 'Wallpapers',
             icon_name: 'image-x-generic-symbolic',
         });
+
+        // When the Dynamic set tab is in use, these pictures aren't shown.
+        const banner = new Adw.Banner({
+            title: 'The dynamic set is in use, so these wallpapers aren’t shown',
+            button_label: 'Use these instead',
+        });
+        settings.bind('use-set', banner, 'revealed', Gio.SettingsBindFlags.GET);
+        banner.connect('button-clicked', () => settings.set_boolean('use-set', false));
+        page.set_banner(banner);
 
         const main = new Adw.PreferencesGroup({
             title: 'Wallpapers',
@@ -152,30 +164,53 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         page.add(location);
         page.add(times);
 
-        // Today's preview
+        // Today's preview: every wallpaper that shows today, with when.
         const today = new Adw.PreferencesGroup({title: 'Today'});
         page.add(today);
         let previewRows = [];
         const refreshPreview = () => {
             for (const row of previewRows)
                 today.remove(row);
-            previewRows = this._previewRows(settings);
+            const useSet = settings.get_boolean('use-set');
+            today.set_description(useSet
+                ? 'Using the dynamic set (Dynamic set tab).'
+                : 'Using the day and night wallpapers (Wallpapers tab).');
+            previewRows = useSet ? this._setPreviewRows(settings) : this._previewRows(settings);
             for (const row of previewRows)
                 today.add(row);
         };
 
         const syncMode = () => {
             const isSun = settings.get_string('mode') === 'sun';
-            location.set_visible(isSun);
+            const useSet = settings.get_boolean('use-set');
+            // A sun-scheduled dynamic set needs the location even with set
+            // times chosen here.
+            location.set_visible(isSun || (useSet && settings.get_string('set-mode') === 'sun'));
             times.set_visible(!isSun);
             mode.set_selected(MODES.indexOf(settings.get_string('mode')));
+            when.set_description(useSet
+                ? 'The dynamic set has its own times (Dynamic set tab). This still ' +
+                  'decides when the light and dark style switch, if that’s on.'
+                : '');
         };
 
         this._watch('changed', (_s, key) => {
-            if (key === 'mode')
+            if (['mode', 'use-set', 'set-mode'].includes(key))
                 syncMode();
             refreshPreview();
         });
+
+        // Keep "Now" up to date while the window is open.
+        let lastMinute = -1;
+        const tick = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 20, () => {
+            const minute = Math.floor(Date.now() / 60_000);
+            if (minute !== lastMinute) {
+                lastMinute = minute;
+                refreshPreview();
+            }
+            return GLib.SOURCE_CONTINUE;
+        });
+        page.connect('destroy', () => GLib.source_remove(tick));
 
         syncMode();
         refreshPreview();
@@ -430,33 +465,137 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
             transitions: settings.get_boolean('use-transitions'),
             transitionMinutes: settings.get_int('transition-minutes'),
         };
+        const wallpapers = {
+            day: settings.get_string('wallpaper-day'),
+            night: settings.get_string('wallpaper-night'),
+            sunrise: config.transitions ? settings.get_string('wallpaper-sunrise') : '',
+            sunset: config.transitions ? settings.get_string('wallpaper-sunset') : '',
+        };
+        // The same fallbacks as the extension: one picture shows all day.
+        wallpapers.day ||= wallpapers.night;
+        wallpapers.night ||= wallpapers.day;
+
         const now = new Date();
-        const rows = [];
-
         const {phase} = getPhase(now, config);
-        rows.push(new Adw.ActionRow({
-            title: 'Showing now',
-            subtitle: PHASE_LABELS[phase],
-            css_classes: ['property'],
-        }));
-
         const {polar, events} = getTodaysEvents(now, config);
         if (polar) {
-            rows.push(new Adw.ActionRow({
-                title: polar === 'day' ? 'The sun doesn’t set today' : 'The sun doesn’t rise today',
-                subtitle: `The ${polar} wallpaper shows all day.`,
-            }));
+            return [previewRow({
+                uri: wallpaperForPhase(phase, wallpapers),
+                title: `${PHASE_LABELS[phase]} wallpaper`,
+                subtitle: polar === 'day' ? 'The sun doesn’t set today' : 'The sun doesn’t rise today',
+                times: 'all day',
+                now: true,
+            })];
         }
-        for (const event of events) {
-            const row = new Adw.ActionRow({title: `${PHASE_LABELS[event.phase]} wallpaper`});
-            row.add_suffix(new Gtk.Label({
-                label: `from ${formatTime(event.time)}`,
-                css_classes: ['dim-label', 'numeric'],
-            }));
-            rows.push(row);
+
+        // Each phase lasts until the next; the last one until tomorrow's
+        // first. Before today's first change, last night's phase is still
+        // showing, so that comes first.
+        const list = [...events];
+        const yesterday = getTodaysEvents(startOfDay(now, -1), config).events.at(-1);
+        if (yesterday && (!list.length || now < list[0].time))
+            list.unshift({...yesterday, earlier: true});
+        const tomorrow = getTodaysEvents(startOfDay(now, 1), config).events[0]?.time;
+        return list.map((event, i) => {
+            const end = list[i + 1]?.time ?? tomorrow;
+            return previewRow({
+                uri: wallpaperForPhase(event.phase, wallpapers),
+                title: `${PHASE_LABELS[event.phase]} wallpaper`,
+                times: end ? `${formatTime(event.time)} – ${formatTime(end)}` : `from ${formatTime(event.time)}`,
+                now: now >= event.time && (!end || now < end),
+                earlier: event.earlier,
+            });
+        });
+    }
+
+    /** The same preview for the dynamic set: one row per picture, in order. */
+    _setPreviewRows(settings) {
+        const set = {
+            mode: settings.get_string('set-mode'),
+            latitude: settings.get_double('latitude'),
+            longitude: settings.get_double('longitude'),
+            entries: parseEntries(settings.get_string('set-images')),
+        };
+        if (!set.entries.length) {
+            return [new Adw.ActionRow({
+                title: 'No pictures yet',
+                subtitle: 'Add some on the Dynamic set tab.',
+            })];
         }
+
+        // Changes that start today, plus the one still showing from
+        // yesterday, each lasting until the next.
+        const now = new Date();
+        const dayStart = startOfDay(now);
+        const dayEnd = startOfDay(now, 1);
+        const events = setEvents(now, set);
+        const rows = [];
+        events.forEach((event, i) => {
+            const next = events[i + 1];
+            const startsToday = event.time >= dayStart && event.time < dayEnd;
+            const carriedOver = event.time < dayStart && next && next.time > dayStart;
+            if (!startsToday && !carriedOver)
+                return;
+            const entry = set.entries[Number(event.phase.slice(1))];
+            const name = Gio.File.new_for_uri(entry.uri).get_basename();
+            rows.push(previewRow({
+                uri: entry.uri,
+                title: set.mode === 'sun' ? labelText(entry) : name,
+                subtitle: set.mode === 'sun' ? name : null,
+                times: next ? `${formatTime(event.time)} – ${formatTime(next.time)}` : `from ${formatTime(event.time)}`,
+                now: event.time <= now && (!next || now < next.time),
+                earlier: carriedOver,
+            }));
+        });
+
+        // Pictures whose sun label doesn't happen here today.
+        const times = entryTimes(now, set);
+        set.entries.forEach((entry, i) => {
+            if (times[i])
+                return;
+            rows.push(previewRow({
+                uri: entry.uri,
+                title: labelText(entry),
+                subtitle: 'Doesn’t happen here today, so it’s skipped',
+                times: '',
+            }));
+        });
         return rows;
     }
+}
+
+/**
+ * One row of the Today preview: thumbnail, what it is, when it shows, and a
+ * "Now" tag on the one showing now.
+ */
+function previewRow({uri, title, subtitle = null, times, now = false, earlier = false}) {
+    const row = new Adw.ActionRow({
+        title: GLib.markup_escape_text(title, -1),
+        subtitle: subtitle ? GLib.markup_escape_text(subtitle, -1) : '',
+    });
+    if (earlier)
+        row.set_subtitle(GLib.markup_escape_text(`${subtitle ? `${subtitle} · ` : ''}started yesterday`, -1));
+    const thumbnail = new Thumbnail({
+        content_fit: Gtk.ContentFit.COVER,
+        valign: Gtk.Align.CENTER,
+        css_classes: ['card'],
+        overflow: Gtk.Overflow.HIDDEN,
+    });
+    thumbnail.set_paintable(uri ? loadThumbnail(Gio.File.new_for_uri(uri)) : null);
+    row.add_prefix(thumbnail);
+    if (now) {
+        row.add_suffix(new Gtk.Label({
+            label: 'Now',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['accent', 'heading'],
+        }));
+    }
+    row.add_suffix(new Gtk.Label({
+        label: times,
+        valign: Gtk.Align.CENTER,
+        css_classes: now ? ['numeric'] : ['dim-label', 'numeric'],
+    }));
+    return row;
 }
 
 // ------------------------------------------------------------------ Helpers
@@ -465,7 +604,17 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
  * A small thumbnail of an image. Loading it scaled down keeps memory low:
  * a 6K wallpaper at full size would take well over 100 MB.
  */
+const thumbnails = new Map();
+
 function loadThumbnail(file) {
+    // Cached: the Today preview rebuilds its rows on every settings change.
+    const uri = file.get_uri();
+    if (!thumbnails.has(uri))
+        thumbnails.set(uri, loadThumbnailUncached(file));
+    return thumbnails.get(uri);
+}
+
+function loadThumbnailUncached(file) {
     try {
         const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(file.get_path(), 216, 138, true);
         return Gdk.Texture.new_for_pixbuf(pixbuf);

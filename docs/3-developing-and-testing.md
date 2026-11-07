@@ -61,10 +61,13 @@ LD_LIBRARY_PATH=/usr/lib64/gnome-shell \
   gjs -m tests/prefs-window.js --page schedule --set "mode='fixed'" --search york
 ```
 
-- `--page wallpapers|schedule`: which page to open on
+- `--page wallpapers|dynamic-set|schedule`: which page to open on
 - `--set key=value`: start with a setting changed (value in GVariant format:
   `true`, `120`, `'text'`)
 - `--search text`: type into the city search
+- `--select N`: on the Dynamic set page, select picture number N (from 0)
+- `--size 660x1200`: window size
+- `--scroll-end`: scroll to the bottom of the page
 - `--screenshot file.png`: save a picture of the window and close it
 
 `make prefs-real` does the same with your real settings.

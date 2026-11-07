@@ -99,6 +99,14 @@ though sunrise moves through the year. If the computer is off for days, the
 old file is only out by that drift until the extension starts and replaces
 it.
 
+## lib/dynamicSet.js: many pictures
+
+The Dynamic set tab's pictures are scheduled here, by clock time or by sun
+labels (dawn, sunrise, midday…). It makes the same kind of change list as
+schedule.js and reuses the same cycle and slideshow code
+(`cycleFromEvents()`, `planFromCycle()`). The whole feature is described in
+[guide 5](5-dynamic-set.md).
+
 ## extension.js: doing it
 
 When enabled, the extension:
@@ -131,16 +139,21 @@ wallpaper as it is.
 
 ## prefs.js: the settings window
 
-Two pages, built from libadwaita rows:
+Three pages, mostly built from libadwaita rows (the Dynamic set page, in
+`dynamicSetPage.js`, is described in [guide 5](5-dynamic-set.md)):
 
 - **Wallpapers:** a row per image, each with a thumbnail and choose/remove
   buttons, the sunrise/sunset switch, how long fades last, and the style
   switch.
 - **Schedule:** sun mode or set times. Sun mode shows the location (city
   search plus coordinates). Set-times mode shows hour and minute pickers. At
-  the bottom, a **Today** preview shows when each wallpaper starts, using
-  the same `lib/schedule.js` as the extension, so it always matches what will
-  happen.
+  the bottom, a **Today** preview lists every wallpaper that shows today:
+  thumbnail, which one it is, the times it shows (e.g. 16:04 – 17:04), and
+  a **Now** tag on the one showing. It follows whichever is in use: up to 4
+  rows for the day/night wallpapers, or one row per picture (by label, or by
+  file name in time mode) for the dynamic set. It uses the same `lib/` code
+  as the extension, so it always matches what will happen, and updates every
+  minute while the window is open.
 
 The city search uses **libgweather**, the offline list of places behind
 GNOME Weather and Clocks, so no internet or API key is needed. The list is
@@ -164,6 +177,7 @@ all be disconnected when the window closes.
 | `transition-minutes` | number | how long each one shows |
 | `fade-minutes` | number | how long each change fades, 0 = swap straight away |
 | `switch-style` | yes/no | also switch light/dark style |
+| `use-set`, `set-mode`, `set-folder`, `set-images` | | the dynamic set, see [guide 5](5-dynamic-set.md) |
 
 You can read and change them from the terminal too, which is handy for
 testing:

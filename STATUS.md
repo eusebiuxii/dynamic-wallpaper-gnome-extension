@@ -20,8 +20,12 @@ Where the project is up to. Last updated 2026-11-07.
   - optional light/dark style switch, off by default;
   - keeps running on the lock screen (`unlock-dialog`);
   - re-checks on wake from sleep;
-  - only changes the wallpaper when the phase changes.
-- Tests: `make test`, 29 passing. One older sun test ("New York,
+  - only changes the wallpaper when the phase changes;
+  - **Dynamic set tab** (2026-11-07): any number of pictures on a 24-hour
+    rounded-square clock, scheduled by time of day or by sun labels (dawn …
+    midnight) that follow the seasons. Optional picture folder. Details in
+    docs/5-dynamic-set.md.
+- Tests: `make test`, 44 passing. One older sun test ("New York,
   midsummer") fails when the computer's time zone is far east (Tokyo,
   Sydney); this is a quirk of the test, not the maths. Sun times are
   within 1–3 minutes of published values.
@@ -37,6 +41,11 @@ Where the project is up to. Last updated 2026-11-07.
 - Guides in `docs/` (1–4) and README.
 
 ## Not done yet
+
+- Dynamic set: checked with screenshots, simulated clicks/drags, and
+  extension.js run outside the Shell. Needs trying for real: adding, dragging
+  and removing by hand, the folder grid, and the wallpaper changing through
+  a day. Waiting on feedback.
 
 - The slideshow version has been checked with GNOME's own slideshow reader
   (GnomeBG) and extension.js run outside the Shell, but not yet in a

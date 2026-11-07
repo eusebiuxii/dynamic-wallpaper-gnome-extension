@@ -21,6 +21,10 @@ const SUN_ALTITUDE = -0.833;
 // dusk it's properly dark; between them and sunrise/sunset is twilight.
 const CIVIL_TWILIGHT_ALTITUDE = -6;
 
+// Golden hour: the warm light while the sun is low, ending at sunset. It's
+// usually counted from when the sun drops below 6°.
+const GOLDEN_HOUR_ALTITUDE = 6;
+
 const toRad = deg => (deg * Math.PI) / 180;
 const toDeg = rad => (rad * 180) / Math.PI;
 
@@ -68,7 +72,9 @@ function cosHourAngle(altitude, latitude, declination) {
  * Sunrise, sunset, dawn and dusk for the local calendar day containing
  * `date`.
  *
- * Returns `{dawn, sunrise, sunset, dusk}` as Date objects. Dawn and dusk are
+ * Returns `{dawn, sunrise, sunset, dusk, noon, goldenHour}` as Date objects
+ * (noon is solar noon, when the sun is highest; goldenHour is the evening
+ * one, when the sun drops below 6°, or null if it never gets that high). Dawn and dusk are
  * civil twilight (sun 6° below the horizon). In summer far north the sky
  * never gets that dark, so dawn and dusk are null even though the sun sets.
  * Near the poles the sun can stay up or down all day; then everything is
@@ -96,7 +102,9 @@ export function getSunTimes(date, latitude, longitude) {
         }
     }
 
-    const none = {dawn: null, sunrise: null, sunset: null, dusk: null};
+    // Solar noon (sun at its highest) exists every day, even near the poles.
+    const none = {dawn: null, sunrise: null, sunset: null, dusk: null,
+        goldenHour: null, noon: julianToDate(day.transit)};
     const cosSun = cosHourAngle(SUN_ALTITUDE, latitude, day.declination);
     if (cosSun < -1)
         return {...none, polar: 'day'}; // midnight sun
@@ -117,5 +125,23 @@ export function getSunTimes(date, latitude, longitude) {
         result.dawn = julianToDate(day.transit - twilightAngle);
         result.dusk = julianToDate(day.transit + twilightAngle);
     }
+
+    // On short winter days far north the sun never gets 6° up.
+    const cosGolden = cosHourAngle(GOLDEN_HOUR_ALTITUDE, latitude, day.declination);
+    if (cosGolden >= -1 && cosGolden <= 1)
+        result.goldenHour = julianToDate(day.transit + toDeg(Math.acos(cosGolden)) / 360);
     return result;
+}
+
+/**
+ * How high the sun is at `date`, in degrees above the horizon (negative when
+ * it's below). Used to colour the day/night track in the settings window.
+ */
+export function getSunAltitude(date, latitude, longitude) {
+    const n = Math.round(dateToJulian(date) - J2000 + longitude / 360);
+    const {transit, declination} = solarDay(n, longitude);
+    const hourAngle = toRad((dateToJulian(date) - transit) * 360);
+    const phi = toRad(latitude);
+    return toDeg(Math.asin(Math.sin(phi) * Math.sin(declination) +
+        Math.cos(phi) * Math.cos(declination) * Math.cos(hourAngle)));
 }

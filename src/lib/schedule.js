@@ -55,12 +55,12 @@ function eventsForDay({lightStart, darkStart, dawn, dusk}, transitions, transiti
 }
 
 /** Local midnight at the start of `date`'s day, shifted by `days`. */
-function startOfDay(date, days = 0) {
+export function startOfDay(date, days = 0) {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 /** `minutes` after local midnight on `day`. Handles daylight-saving days. */
-function atMinutes(day, minutes) {
+export function atMinutes(day, minutes) {
     return new Date(day.getFullYear(), day.getMonth(), day.getDate(),
         Math.floor(minutes / 60), minutes % 60);
 }
@@ -126,9 +126,18 @@ function eventsAround(now, config) {
  * @returns {{phase: string, nextChange: Date | null}}
  */
 export function getPhase(now, config) {
-    const events = eventsAround(now, config);
+    return phaseFromEvents(now, eventsAround(now, config), Phase.NIGHT);
+}
 
-    let phase = Phase.NIGHT;
+/**
+ * The same as getPhase(), for any sorted list of `{time, phase}` changes
+ * (the dynamic set builds its own; see dynamicSet.js). `phase` is whatever
+ * was last set at or before `now`, or `initial` if nothing was.
+ *
+ * @returns {{phase: string | null, nextChange: Date | null}}
+ */
+export function phaseFromEvents(now, events, initial = null) {
+    let phase = initial;
     let nextChange = null;
     for (const event of events) {
         if (event.time <= now) {
@@ -152,12 +161,23 @@ export function getPhase(now, config) {
  * @returns {{start: Date, segments: {phase: string, start: Date, end: Date}[]}}
  */
 export function getCycle(now, config) {
+    return cycleFromEvents(now, eventsAround(now, config));
+}
+
+/**
+ * The same as getCycle(), for any sorted list of `{time, phase}` changes.
+ * Returns null when there are none.
+ */
+export function cycleFromEvents(now, events) {
     // Keep only real changes: polar days and nights repeat the same phase.
     const changes = [];
-    for (const event of eventsAround(now, config)) {
+    for (const event of events) {
         if (!changes.length || changes[changes.length - 1].phase !== event.phase)
             changes.push(event);
     }
+
+    if (!changes.length)
+        return null;
 
     let first = 0;
     for (let i = 0; i < changes.length; i++) {

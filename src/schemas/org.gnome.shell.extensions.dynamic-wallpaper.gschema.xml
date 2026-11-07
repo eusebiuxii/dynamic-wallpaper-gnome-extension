@@ -76,6 +76,30 @@
       <description>The old wallpaper fades into the new one over this many minutes, starting at the change. 0 swaps straight away. A fade is never longer than the wallpaper it fades into is shown for.</description>
     </key>
 
+    <!-- Dynamic set (the "Dynamic set" tab) -->
+    <key name="use-set" type="b">
+      <default>false</default>
+      <summary>Use the dynamic set instead of the day/night wallpapers</summary>
+    </key>
+    <key name="set-mode" type="s">
+      <choices>
+        <choice value="time"/>
+        <choice value="sun"/>
+      </choices>
+      <default>'sun'</default>
+      <summary>How the dynamic set is scheduled</summary>
+      <description>'time': each picture starts at a clock time. 'sun': each picture has a sun label (dawn, sunrise, midday...) worked out from the location, so it moves with the seasons.</description>
+    </key>
+    <key name="set-folder" type="s">
+      <default>''</default>
+      <summary>Folder to pick dynamic set pictures from (a URI, empty for none)</summary>
+    </key>
+    <key name="set-images" type="s">
+      <default>'[]'</default>
+      <summary>The dynamic set's pictures, as JSON</summary>
+      <description>A list of {"uri": file URI, "time": minutes after midnight (time mode), "label": sun label id (sun mode)}.</description>
+    </key>
+
     <!-- Style -->
     <key name="switch-style" type="b">
       <default>false</default>

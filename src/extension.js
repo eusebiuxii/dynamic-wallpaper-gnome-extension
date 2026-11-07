@@ -18,8 +18,9 @@ import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {getPhase, Phase} from './lib/schedule.js';
+import {getPhase, phaseFromEvents, Phase} from './lib/schedule.js';
 import {planSlideshow, slideshowXml} from './lib/slideshow.js';
+import {parseEntries, planSetSlideshow, setEvents} from './lib/dynamicSet.js';
 
 // However far away the next change is, check again at least this often.
 // It catches the clock changing, time zone changes and anything else the
@@ -119,20 +120,51 @@ export default class DynamicWallpaperExtension extends Extension {
         };
     }
 
+    /**
+     * The dynamic set (see lib/dynamicSet.js), or null when it's not in use.
+     * Entries get a `file` path for the slideshow.
+     */
+    _readSet() {
+        const s = this._settings;
+        if (!s.get_boolean('use-set'))
+            return null;
+        const entries = parseEntries(s.get_string('set-images'))
+            .map(entry => ({...entry, file: Gio.File.new_for_uri(entry.uri).get_path() ?? ''}))
+            .filter(entry => entry.file);
+        return {
+            mode: s.get_string('set-mode'),
+            latitude: s.get_double('latitude'),
+            longitude: s.get_double('longitude'),
+            entries,
+        };
+    }
+
     /** Apply the current phase (if it changed) and set the next timer. */
     _update() {
         const now = new Date();
+        // The day/night phase drives the light/dark style, and the
+        // wallpaper too unless the dynamic set is in use.
         const {phase, nextChange} = getPhase(now, this._readConfig());
+        let key = phase;
+        let next = nextChange;
 
-        // Only touch the wallpaper when the phase actually changes. That way
-        // if you pick a different wallpaper in Settings by hand, it stays
-        // until the next sunrise or sunset.
-        if (phase !== this._lastPhase) {
-            this._apply(now, phase);
-            this._lastPhase = phase;
+        const set = this._readSet();
+        if (set) {
+            const picture = phaseFromEvents(now, setEvents(now, set));
+            key = `${phase} ${picture.phase}`;
+            if (picture.nextChange && (!next || picture.nextChange < next))
+                next = picture.nextChange;
         }
 
-        this._scheduleNext(now, nextChange);
+        // Only touch the wallpaper when something actually changes. That way
+        // if you pick a different wallpaper in Settings by hand, it stays
+        // until the next change.
+        if (key !== this._lastPhase) {
+            this._apply(now, phase);
+            this._lastPhase = key;
+        }
+
+        this._scheduleNext(now, next);
     }
 
     _apply(now, phase) {
@@ -154,10 +186,11 @@ export default class DynamicWallpaperExtension extends Extension {
      * rises a minute or two earlier or later each day.
      */
     _writeSlideshow(now) {
-        const s = this._settings;
-        const config = this._readConfig();
-        const plan = planSlideshow(now, config, this._readWallpapers(),
-            s.get_int('fade-minutes') * 60);
+        const fadeSeconds = this._settings.get_int('fade-minutes') * 60;
+        const set = this._readSet();
+        const plan = set
+            ? planSetSlideshow(now, set, fadeSeconds)
+            : planSlideshow(now, this._readConfig(), this._readWallpapers(), fadeSeconds);
         if (!plan)
             return; // no pictures chosen yet: leave the wallpaper alone
 
