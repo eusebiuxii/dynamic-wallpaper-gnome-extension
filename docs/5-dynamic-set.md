@@ -59,11 +59,14 @@ since they only apply to the day/night wallpapers.
   to orange; below −6°: night).
 - A small **triangle** outside the track marks the time now (only when the
   preview date is today).
-- In Sun mode, short **ticks across the track** mark where each sun label
-  falls that day: the places pictures snap to. They're dark on the light
-  (day) part of the track and light on the dark (night) part, so they show
-  everywhere, and they're ticks rather than dots so they don't look like
-  pictures. Hover one to see its name and time. They grow while you drag.
+- **Lines across the track** mark where each sun label (dawn, sunrise,
+  midday, midnight…) falls that day, in both modes. In Sun mode they're the
+  places pictures snap to; in Time of day mode they show where the sun is.
+  They're in the system's accent colour (Settings → Appearance) and stick
+  out a little either side of the track, so they show on the day and night
+  parts alike, and they're lines rather than dots so they don't look like
+  pictures. Hover one to see its
+  name and time. In Sun mode they grow while you drag.
 - Each picture is a **coloured dot**. A grey dot is a picture whose sun
   label doesn't happen on the preview date (see "Far north" below).
 
@@ -169,6 +172,84 @@ Afternoon.
 time → sun gives each picture the nearest label plus the minutes to it;
 sun → time gives each the clock time it falls at today.
 
+## Presets
+
+A **preset** is a dynamic set saved to a file, so you can keep several
+(Big Sur, Mojave, a winter set…) and switch between them. Presets are only
+for the dynamic set, not the day/night wallpapers. Added 2026-11-07.
+
+The **Presets** row sits just above the clock:
+
+- **The dropdown** lists the saved presets. Picking one opens it: its
+  pictures, *Time of day* or *Sun*, fade length and picture folder replace
+  what's on the tab. Only you switch presets; nothing changes them on its
+  own.
+- **The status** under "Preset" says *Saved*, *Changed since it was saved*,
+  or that the pictures aren't saved as a preset yet. Changes made on the tab
+  are used straight away, as before, but only go into the preset's file
+  when you press **Save**.
+- **Opening another preset with unsaved changes** asks first: *Save*,
+  *Don't Save* or *Cancel*. If the pictures aren't a preset yet, *Save as
+  Preset…* asks for a name.
+- **⋮ menu**:
+  - *Save as New Preset…*: asks for a name. If that name is already taken,
+    the button changes to *Replace*.
+  - *Open Preset File…*: opens a preset from anywhere (one someone sent you,
+    say). It's copied into the presets folder (renamed "Name 2" if the name
+    is taken) and then opened.
+  - *Rename…*, *Delete*: Delete moves the file to the Trash. The pictures
+    stay on the clock, now unsaved.
+  - *Open Presets Folder*, *Show Preset in Files*: so the files are easy to
+    find.
+
+If the pictures on the tab exactly match a saved preset (for example after
+deleting a copy of it), that preset is selected in the dropdown.
+
+**Where they're kept:** `~/.local/share/dynamic-wallpaper/presets/`, one
+`.json` file per preset, named after it (`Big Sur.json`). The path is shown
+on the tab. It's the same place for everyone who installs the extension, and
+uninstalling or updating the extension doesn't remove it.
+
+**The file** is plain JSON you can read or edit by hand:
+
+```json
+{
+  "format": 1,
+  "name": "Big Sur",
+  "mode": "sun",
+  "fadeMinutes": 15,
+  "folder": "~/Pictures/Backgrounds",
+  "pictures": [
+    {"file": "~/Pictures/Backgrounds/Big-Sur-Sunrise-6k.jpg", "label": "dawn"},
+    {"file": "~/Pictures/Backgrounds/Big-Sur-Day-6k.jpg", "label": "morning"},
+    {"file": "~/Pictures/Backgrounds/Big-Sur-Sunset-6k.jpg", "label": "sunset", "offset": 20},
+    {"file": "~/Pictures/Backgrounds/Big-Sur-Night-6k.jpg", "label": "night"}
+  ]
+}
+```
+
+- In time mode each picture has `"time": "07:30"` instead of `label` and
+  `offset`.
+- Pictures in your home folder are written as `~/...`, so the file holds no
+  user name and works for another account with the same folders. Other
+  pictures use their full path. A path that starts with neither `~` nor `/`
+  is taken from the preset file's own folder, so a preset can be shared in a
+  folder with its pictures (*Open Preset File…* turns those into full paths
+  when it copies the preset in).
+- Sun presets don't depend on where you are, so they work anywhere. Time
+  presets use the same clock times everywhere.
+- `format` is there so later versions can change the file and still read
+  old ones. A preset from a newer version is refused with a message rather
+  than half-read.
+- A picture with an unknown label or a bad time is left out. A file that
+  isn't a preset at all is listed as "(can't be read)" so it can still be
+  found and deleted.
+
+**Missing pictures:** if a picture's file is gone (deleted, moved, or on a
+drive that isn't plugged in), its dot is a hollow red ring, its details say
+"File not found", and the extension leaves it out of the wallpaper. This
+applies to any set, not just presets.
+
 ## How it works
 
 Code:
@@ -189,6 +270,15 @@ Code:
   with Cairo, with the details panel laid over its middle (`Gtk.Overlay`).
   Clicks and drags use `Gtk.GestureDrag`; the track is stored as one point
   per minute, and a click finds the nearest one.
+- `src/lib/presets.js`: preset files: reading and writing the format, the
+  `~/` paths, listing, renaming, importing and deleting. Uses Gio/GLib only,
+  tested by `make test` (`tests/presets.test.js`, in a temporary folder).
+- `src/presetsGroup.js`: the Presets row. Opening a preset writes all its
+  settings in one go (on a separate `Gio.Settings` object in delay mode, so
+  the extension rewrites the wallpaper once). "Unsaved" means the settings
+  differ from the open preset's file, compared the way the file stores them
+  (`samePreset()`). It watches the folder, so presets added or removed in
+  Files show up straight away. The extension never reads presets.
 - `src/extension.js`: when **Use the dynamic set** is on, it writes the set's
   slideshow instead of the day/night one. Everything else (new file name per
   change) is unchanged. The light/dark style follows its own schedule from
@@ -214,6 +304,7 @@ extension write a new slideshow file many times a second.
 | `set-mode` | text | `time` or `sun` |
 | `set-folder` | text | folder URI to pick pictures from, or empty |
 | `set-images` | text (JSON) | the pictures (below) |
+| `set-preset` | text | file name of the preset the set was opened from (in the presets folder), or empty |
 
 `set-images` is a list like:
 
@@ -235,14 +326,18 @@ gsettings get org.gnome.shell.extensions.dynamic-wallpaper set-images
 gsettings set org.gnome.shell.extensions.dynamic-wallpaper use-set true
 ```
 
-Previewing the tab without installing:
+Previewing the tab without installing (`XDG_DATA_HOME` points the presets
+folder somewhere else, so your real presets aren't touched; leave it out to
+use them):
 
 ```bash
 GSETTINGS_BACKEND=memory GI_TYPELIB_PATH=/usr/lib64/gnome-shell/girepository-1.0 \
-LD_LIBRARY_PATH=/usr/lib64/gnome-shell \
+XDG_DATA_HOME=/tmp/dw-preview LD_LIBRARY_PATH=/usr/lib64/gnome-shell \
   gjs -m tests/prefs-window.js --page dynamic-set --select 0 \
   --set "set-images='[{\"uri\":\"file:///path/to/a.jpg\",\"time\":480,\"label\":\"sunrise\"}]'"
 ```
+
+`--open-preset "Big Sur"` opens a preset as if picked from the dropdown.
 
 ## Not done yet / ideas
 

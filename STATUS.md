@@ -6,7 +6,7 @@ Where the project is up to. Last updated 2026-11-07.
 
 - Extension written: `src/` (extension.js, prefs.js, dynamicSetPage.js,
   lib/sun.js, lib/schedule.js, lib/slideshow.js, lib/dynamicSet.js,
-  schema, metadata). GNOME 49–51, UUID `dynamic-wallpaper@eusebiuxii.com`.
+  lib/presets.js, presetsGroup.js, schema, metadata). GNOME 49–51, UUID `dynamic-wallpaper@eusebiuxii.com`.
 - Settings window tabs, in order: **Wallpapers · Dynamic set · Theme ·
   Schedule**.
 - Features:
@@ -25,8 +25,8 @@ Where the project is up to. Last updated 2026-11-07.
       panel) or by sun (17 labels: 12 day, 5 night; the dot follows the
       pointer and snaps onto a label within 8 min, otherwise saved as
       label ± minutes, so it follows the seasons);
-    - track coloured by the sun's height; label ticks dark/light to match
-      the track; hour labels every 3 h; picture times outside the track;
+    - track coloured by the sun's height; label lines (both modes) in the
+      accent colour, poking out either side of the track; hour labels every 3 h; picture times outside the track;
       drag tag ("Dusk · 17:04", accent colour when snapped);
     - optional picture folder (thumbnail grid when adding), preview-date
       slider, "space evenly", fade length;
@@ -34,12 +34,18 @@ Where the project is up to. Last updated 2026-11-07.
     (banner + "Use these instead" on Wallpapers);
   - **Theme tab**: optional light/dark style switch, off by default, with
     its own schedule: sunset → sunrise, dusk → dawn, or set times;
+  - **Presets** (Dynamic set tab only, docs/5 "Presets"): save the set
+    to a JSON file in `~/.local/share/dynamic-wallpaper/presets/`, switch
+    between them from a dropdown above the clock, Save / Save as / Open
+    file / Rename / Delete (to Trash) / Open folder / Show in Files; asks
+    before replacing unsaved changes; picture paths stored as `~/...`;
+    missing pictures shown as red rings and skipped by the extension;
   - Schedule tab's **Today** list: thumbnail, label, times and "Now" for
     each wallpaper, for whichever is in use;
   - keeps running on the lock screen (`unlock-dialog`);
   - re-checks on wake from sleep;
   - only changes the wallpaper/style when they need to change.
-- Tests: `make test`, 48 passing. One older sun test ("New York,
+- Tests: `make test`, 56 passing. One older sun test ("New York,
   midsummer") fails when the computer's time zone is far east (Tokyo,
   Sydney); this is a quirk of the test, not the maths. Sun times are
   within 1–3 minutes of published values.
@@ -50,30 +56,30 @@ Where the project is up to. Last updated 2026-11-07.
 - First version ran fine in a real GNOME 51 session (Fedora 45 laptop).
   Also installed on the Fedora 43 / GNOME 49 desktop (`make link`); its
   settings window checked there too (before the dynamic set existed).
-- `make pack` builds a valid zip (includes dynamicSetPage.js).
+- `make pack` builds a valid zip (includes dynamicSetPage.js, presetsGroup.js).
 - Guides in `docs/` (1–5) and README.
 
-## Where we left off (2026-11-07, evening)
+## Where we left off (2026-11-07, late evening)
 
-- Committed and pushed up to `b7ae1e4` (dynamic set tab). **Not committed
-  yet:** greying out the unused tab, the Theme tab (style moved off the
-  Wallpapers tab, own schedule keys `style-mode`, `style-day-start`,
-  `style-night-start`), tab order, and these notes.
-- About to log out and in on the laptop for the first real test of the
-  slideshow wallpaper, the dynamic set, and the Theme tab's switching.
+- Committed up to `2f3942d` (Theme tab, greying out). The user tried the
+  real session: fades and the dynamic set work well; living with it for a
+  while to be sure.
+- **Not committed yet:** presets (`src/lib/presets.js`,
+  `src/presetsGroup.js`, `tests/presets.test.js`, key `set-preset`), red
+  rings for missing pictures, the extension skipping missing pictures, and
+  these notes. Checked with tests, screenshots and a scripted run through
+  open / edit / save / save as / rename / delete; not yet tried by hand in
+  the real settings window.
 - Open question: commit `726045b` (already pushed) has a personal email as
   author. Fixing it means rewriting that commit and force-pushing `main`;
   not done, waiting for a yes.
 
 ## Not done yet
 
-- Real-session test (after logging in again):
-  - `gsettings get org.gnome.desktop.background picture-uri` should point
-    at `~/.local/share/dynamic-wallpaper/schedule-*.xml`, and the right
-    picture should show straight away;
-  - dynamic set by hand: adding, dragging in both modes, removing, the
-    folder grid, and the wallpaper changing through a day;
-  - Theme tab switching at the right time.
+- Presets by hand in the real settings window (needs `make schemas` and
+  closing/reopening the window): the dropdown, dialogs, the ⋮ menu's
+  Open Presets Folder / Show in Files.
+- Theme tab switching at the right time (real session).
 - Usability ideas from the review, not done yet (most useful first):
   thumbnails inside the dots; undo after removing; keyboard nudging
   (arrows/Delete/Tab); handling dots that overlap; a "play the day"

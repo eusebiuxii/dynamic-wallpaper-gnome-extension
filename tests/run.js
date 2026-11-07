@@ -11,5 +11,7 @@ print('\nslideshow.js');
 await import('./slideshow.test.js');
 print('\ndynamicSet.js');
 await import('./dynamicSet.test.js');
+print('\npresets.js');
+await import('./presets.test.js');
 
 System.exit(summary() ? 0 : 1);

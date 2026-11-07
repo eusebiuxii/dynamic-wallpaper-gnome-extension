@@ -31,6 +31,7 @@ import {
     minutesOfDay, parseEntries, placeOnLabel, spreadEvenly, SUN_LABELS,
 } from './lib/dynamicSet.js';
 import {getSunAltitude} from './lib/sun.js';
+import {buildPresetsGroup} from './presetsGroup.js';
 
 const DAY_MINUTES = 24 * 60;
 const CLOCK_SIZE = 540; // the clock widget is this many pixels square
@@ -45,6 +46,7 @@ const TIME_SNAP_MINUTES = 15; // time mode: dragging and adding use these steps
 const DAY_COLOUR = [0.98, 0.91, 0.66];
 const TWILIGHT_COLOUR = [0.95, 0.53, 0.24];
 const NIGHT_COLOUR = [0.33, 0.33, 0.40];
+const MISSING_COLOUR = [0.88, 0.11, 0.14]; // a picture whose file is gone
 
 const pad = n => String(n).padStart(2, '0');
 const formatMinutes = m => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
@@ -255,6 +257,10 @@ export function buildDynamicSetPage(window, settings, watch) {
     options.add(folderRow(window, settings, watch));
     page.add(options);
 
+    // --- Presets, just above the clock
+    const presets = buildPresetsGroup(window, settings, watch);
+    page.add(presets);
+
     // --- The clock
     const clockGroup = new Adw.PreferencesGroup();
     clockGroup.add(clock.widget);
@@ -314,7 +320,7 @@ export function buildDynamicSetPage(window, settings, watch) {
     changes.add(fade);
     page.add(changes);
 
-    for (const group of [options, clockGroup, below, changes]) {
+    for (const group of [options, presets, clockGroup, below, changes]) {
         settings.bind('use-set', group, 'sensitive', Gio.SettingsBindFlags.GET);
         fadeWhenOff(group);
     }
@@ -325,6 +331,7 @@ export function buildDynamicSetPage(window, settings, watch) {
     });
     // For tests/prefs-window.js.
     page._clock = clock;
+    page._presets = presets._presets;
     return page;
 }
 
@@ -397,6 +404,7 @@ class SetClock {
         this._drag = null;
         this._thumbs = new ThumbnailQueue();
         this._updating = false;
+        this._exists = new Map(); // uri → whether the file is there
 
         this._area = new Gtk.DrawingArea({
             content_width: CLOCK_SIZE,
@@ -437,6 +445,7 @@ class SetClock {
             if (settings.get_string('set-images') === this._json())
                 return;
             this.entries = parseEntries(settings.get_string('set-images'));
+            this._exists.clear();
             this._select(Math.min(this._selected, this.entries.length - 1));
         });
         for (const key of ['set-mode', 'latitude', 'longitude'])
@@ -484,6 +493,7 @@ class SetClock {
     /** Replaces the pictures and saves them. */
     setEntries(entries) {
         this.entries = entries;
+        this._exists.clear();
         this._save();
         this._changed();
     }
@@ -491,6 +501,13 @@ class SetClock {
     setPreviewDate(date) {
         this._previewDate = noonOf(date);
         this._changed();
+    }
+
+    /** Whether a picture's file is missing (checked once, then remembered). */
+    _missing(uri) {
+        if (!this._exists.has(uri))
+            this._exists.set(uri, Gio.File.new_for_uri(uri).query_exists(null));
+        return !this._exists.get(uri);
     }
 
     _json() {
@@ -676,27 +693,25 @@ class SetClock {
             }
         }
 
-        // Sun mode: marks where each label falls, so you can see where
-        // pictures will snap to. They grow while you drag, and the one a
+        // A line across the track where each sun label falls (dawn,
+        // sunrise, midday...), in both modes: in sun mode they're where
+        // pictures snap to, in time mode they show where the sun is. Lines,
+        // not dots, so they aren't mistaken for pictures. In the system's
+        // accent colour, poking out a little either side of the track. In sun mode they grow while you drag, and the one a
         // picture has snapped onto gets a ring.
-        if (this._mode === 'sun') {
-            const dragging = this._drag?.moved && this._drag.index >= 0;
+        {
+            const sun = this._mode === 'sun';
+            const dragging = sun && this._drag?.moved && this._drag.index >= 0;
             const dragged = dragging ? this.entries[this._drag.index] : null;
             for (const label of availableLabels(day, latitude, longitude)) {
                 const minute = minutesOfDay(label.time);
                 const [x, y] = this._point(minute);
                 const [nx, ny] = this._inward(minute);
-                // A short tick across the track (not a dot, so it isn't
-                // mistaken for a picture), dark on the light parts of the
-                // track and light on the dark parts.
-                const [r, g, b] = skyColour(getSunAltitude(label.time, latitude, longitude));
-                const light = 0.299 * r + 0.587 * g + 0.114 * b > 0.55;
-                if (light)
-                    cr.setSourceRGBA(0.15, 0.13, 0.12, dragging ? 0.8 : 0.55);
-                else
-                    cr.setSourceRGBA(1, 1, 1, dragging ? 0.85 : 0.6);
-                const half = TRACK_WIDTH / 2 + (dragging ? 2 : -1.5);
-                cr.setLineWidth(dragging ? 3 : 2);
+                cr.setSourceRGB(accent.red, accent.green, accent.blue);
+                // A little past both edges of the track, so they also show
+                // against the window where the track is dark.
+                const half = TRACK_WIDTH / 2 + (dragging ? 5 : 3);
+                cr.setLineWidth(dragging ? 3.5 : 2.5);
                 cr.moveTo(x - nx * half, y - ny * half);
                 cr.lineTo(x + nx * half, y + ny * half);
                 cr.stroke();
@@ -742,6 +757,14 @@ class SetClock {
             cr.setSourceRGB(...background);
             cr.arc(dot.x, dot.y, radius + 2.5, 0, 2 * Math.PI);
             cr.fill();
+            if (this._missing(this.entries[dot.index].uri)) {
+                // A hollow red ring: the file is gone, so it's skipped.
+                cr.setSourceRGB(...MISSING_COLOUR);
+                cr.setLineWidth(3);
+                cr.arc(dot.x, dot.y, radius - 1.5, 0, 2 * Math.PI);
+                cr.stroke();
+                continue;
+            }
             if (dot.available)
                 cr.setSourceRGB(accent.red, accent.green, accent.blue);
             else
@@ -823,7 +846,8 @@ class SetClock {
                 const when = this._mode === 'sun'
                     ? `${labelText(entry)} · ${dot.available ? formatMinutes(dot.minute) : 'not on this date'}`
                     : formatMinutes(dot.minute);
-                tooltip.set_text(`${basename(entry.uri)}\n${when}`);
+                const missing = this._missing(entry.uri) ? '\nFile not found: this picture is skipped' : '';
+                tooltip.set_text(`${basename(entry.uri)}\n${when}${missing}`);
                 return true;
             }
             if (this._nearestMinute(x, y).distance <= HIT_RADIUS) {
@@ -833,7 +857,9 @@ class SetClock {
                     const at = formatMinutes(this._sunMinute(place) ?? minute);
                     tooltip.set_text(`${labelText(place)} · ${at}\nClick to add a picture here`);
                 } else {
-                    tooltip.set_text(`${formatMinutes(this._snapTime(minute))}\nClick to add a picture here`);
+                    const near = this._placeOnSun(minute);
+                    const label = near.offset ? '' : ` · ${labelText(near)}`;
+                    tooltip.set_text(`${formatMinutes(this._snapTime(minute))}${label}\nClick to add a picture here`);
                 }
                 return true;
             }
@@ -1173,6 +1199,7 @@ class SetClock {
             this._chooseImage(x, y, uri => {
                 if (this.entries[index]) {
                     this.entries[index].uri = uri;
+                    this._exists.delete(uri);
                     this._save();
                     this._changed();
                 }
@@ -1206,8 +1233,10 @@ class SetClock {
     _showIdle() {
         this._panel.set_visible_child_name('idle');
         const now = new Date();
-        const index = this.entries.length ? currentEntry(now, this._set()) : -1;
-        const entry = this.entries[index];
+        // Like the extension, leave out pictures whose file is missing.
+        const present = this.entries.filter(e => !this._missing(e.uri));
+        const index = present.length ? currentEntry(now, {...this._set(), entries: present}) : -1;
+        const entry = present[index];
         this._idleTitle.set_visible(Boolean(entry));
         this._idlePicture.set_visible(Boolean(entry));
         this._idleName.set_visible(Boolean(entry));
@@ -1231,10 +1260,13 @@ class SetClock {
 
         const dot = this._dots()[this._selected];
         const date = formatDate(this._previewDate);
+        const missing = this._missing(entry.uri);
+        const path = Gio.File.new_for_uri(entry.uri).get_path() ?? entry.uri;
+        const missingText = `File not found, so this picture is skipped: ${path.replace(GLib.get_home_dir(), '~')}`;
         if (this._mode === 'time') {
             this._hours.set_value(Math.floor(entry.time / 60));
             this._minutes.set_value(entry.time % 60);
-            this._info.set_label('Every day');
+            this._info.set_label(missing ? missingText : 'Every day');
             return;
         }
 
@@ -1255,7 +1287,7 @@ class SetClock {
 
         const help = entry.offset ? labelText(entry)
             : SUN_LABELS.find(l => l.id === entry.label)?.help ?? '';
-        this._info.set_label(dot?.available
+        this._info.set_label(missing ? missingText : dot?.available
             ? `${help}. On ${date}: from ${formatMinutes(dot.minute)}`
             : `${labelName(entry.label)} doesn’t happen on ${date} here, so this picture is skipped`);
     }

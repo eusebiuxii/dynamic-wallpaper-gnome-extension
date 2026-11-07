@@ -99,6 +99,11 @@
       <summary>The dynamic set's pictures, as JSON</summary>
       <description>A list of {"uri": file URI, "time": minutes after midnight (time mode), "label": sun label id (sun mode)}.</description>
     </key>
+    <key name="set-preset" type="s">
+      <default>''</default>
+      <summary>The preset the dynamic set was opened from</summary>
+      <description>A file name in ~/.local/share/dynamic-wallpaper/presets, or empty when the set isn't saved as a preset. Only the settings window uses this.</description>
+    </key>
 
     <!-- Style -->
     <key name="switch-style" type="b">

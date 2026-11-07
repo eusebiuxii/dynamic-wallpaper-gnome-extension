@@ -133,7 +133,9 @@ export default class DynamicWallpaperExtension extends Extension {
             return null;
         const entries = parseEntries(s.get_string('set-images'))
             .map(entry => ({...entry, file: Gio.File.new_for_uri(entry.uri).get_path() ?? ''}))
-            .filter(entry => entry.file);
+            // A missing picture (deleted, or on a drive that isn't
+            // plugged in) is left out rather than showing a blank screen.
+            .filter(entry => entry.file && GLib.file_test(entry.file, GLib.FileTest.EXISTS));
         return {
             mode: s.get_string('set-mode'),
             latitude: s.get_double('latitude'),

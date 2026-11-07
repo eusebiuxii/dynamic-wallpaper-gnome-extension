@@ -7,6 +7,7 @@
 //   gjs -m tests/prefs-window.js --set use-transitions=true
 //   gjs -m tests/prefs-window.js --search london       type into the city search
 //   gjs -m tests/prefs-window.js --page dynamic-set --select 0   select a picture
+//   gjs -m tests/prefs-window.js --page dynamic-set --open-preset "Big Sur"   open a preset
 //   gjs -m tests/prefs-window.js --size 660x1300       window size
 //   gjs -m tests/prefs-window.js --scroll-end          scroll to the bottom of the page
 //   gjs -m tests/prefs-window.js --screenshot out.png  save a picture and quit
@@ -32,6 +33,7 @@ metadata.path = srcDir.get_path();
 
 // Parse arguments.
 let page = null, screenshot = null, search = null, select = null, size = null, scrollEnd = false;
+let openPreset = null;
 const presets = [];
 for (let i = 0; i < ARGV.length; i++) {
     if (ARGV[i] === '--page') page = ARGV[++i];
@@ -41,6 +43,7 @@ for (let i = 0; i < ARGV.length; i++) {
     else if (ARGV[i] === '--select') select = Number(ARGV[++i]);
     else if (ARGV[i] === '--size') size = ARGV[++i].split('x').map(Number);
     else if (ARGV[i] === '--scroll-end') scrollEnd = true;
+    else if (ARGV[i] === '--open-preset') openPreset = ARGV[++i];
 }
 
 const {default: Preferences} = await import('../src/prefs.js');
@@ -80,6 +83,15 @@ app.connect('activate', () => {
     if (select !== null)
         window.get_visible_page()._clock?.select(select);
     window.present();
+    if (openPreset !== null) {
+        // Once the window is up, like a person picking from the dropdown.
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
+            window.get_visible_page()._presets?.pick(openPreset);
+            if (select !== null)
+                window.get_visible_page()._clock?.select(select);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
 
     if (screenshot) {
         // Give it a moment to lay out and load thumbnails, then save.
@@ -105,7 +117,11 @@ app.connect('activate', () => {
             const snapshot = Gtk.Snapshot.new();
             const [w, h] = [window.get_width(), window.get_height()];
             paintable.snapshot(snapshot, w, h);
-            const texture = window.get_native().get_renderer().render_texture(snapshot.to_node(), null);
+            const node = snapshot.to_node();
+            // Nothing drawn yet (large pictures still loading): try again.
+            if (!node)
+                return GLib.SOURCE_CONTINUE;
+            const texture = window.get_native().get_renderer().render_texture(node, null);
             texture.save_to_png(screenshot);
             print(`Saved ${screenshot}`);
             app.quit();
