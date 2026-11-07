@@ -7,5 +7,7 @@ print('sun.js');
 await import('./sun.test.js');
 print('\nschedule.js');
 await import('./schedule.test.js');
+print('\nslideshow.js');
+await import('./slideshow.test.js');
 
 System.exit(summary() ? 0 : 1);

@@ -69,6 +69,13 @@
       <description>The sunrise wallpaper starts at dawn, the sunset one ends at dusk.</description>
     </key>
 
+    <key name="fade-minutes" type="i">
+      <range min="0" max="120"/>
+      <default>15</default>
+      <summary>How long each change of wallpaper takes</summary>
+      <description>The old wallpaper fades into the new one over this many minutes, starting at the change. 0 swaps straight away. A fade is never longer than the wallpaper it fades into is shown for.</description>
+    </key>
+
     <!-- Style -->
     <key name="switch-style" type="b">
       <default>false</default>

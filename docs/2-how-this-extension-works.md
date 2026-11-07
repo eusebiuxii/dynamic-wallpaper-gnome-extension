@@ -1,7 +1,7 @@
 # 2. How this extension works
 
-The extension has four parts. The two in `lib/` are plain JavaScript with no
-GNOME imports, so they can be tested on their own.
+The extension has five parts. The three in `lib/` are plain JavaScript with
+no GNOME imports, so they can be tested on their own.
 
 ```text
                settings (GSettings)
@@ -10,7 +10,7 @@ GNOME imports, so they can be tested on their own.
      prefs.js                     extension.js
    (settings window)            (inside GNOME Shell)
           │                             │
-          └───────── both use ──────────┘
+          └───────── both use ──────────┘   also uses lib/slideshow.js
                 lib/schedule.js  →  lib/sun.js
 ```
 
@@ -66,13 +66,47 @@ i.e. at dusk.
 `wallpaperForPhase()` picks the image. A missing sunrise or sunset image
 falls back to the day one.
 
+`getCycle(now, config)` lists the phases for the next 24 hours, starting at
+the most recent change. The slideshow below is built from it. It stops when
+the first phase comes round again, because in autumn tomorrow's sunset is a
+few minutes earlier than today's.
+
+## lib/slideshow.js: a wallpaper GNOME times by itself
+
+GNOME Shell draws the wallpaper at login **before** it starts any
+extensions. If the extension set a plain image, you'd see whatever was set
+when you last shut down (say, night) for a moment, then a swap to the right
+one.
+
+So instead the extension writes a **slideshow file**, the same XML format
+GNOME's own day/night wallpapers use, and points the wallpaper at it. The
+file lists each picture, how long it shows and how long the fade into it
+lasts, starting from a set date and time, and GNOME repeats it once the list
+runs out. GNOME works out the right picture from the clock as soon as it
+loads the file, so it's right from the first frame. GNOME also does the
+fades, and re-checks after sleep and time zone changes.
+
+- `planSlideshow()` turns the 24-hour cycle into pieces: neighbours showing
+  the same picture are merged, and each piece starts with a fade from the
+  one before (the first fades in from the last, as the cycle repeats).
+  Fades start **at** each change: at dawn, the night wallpaper starts fading
+  into the sunrise one. A fade is never longer than the piece it fades into.
+- `slideshowXml()` writes that as XML.
+
+Because the file starts at the latest change and the extension writes a new
+one at every change, it never drifts by more than a minute or two even
+though sunrise moves through the year. If the computer is off for days, the
+old file is only out by that drift until the extension starts and replaces
+it.
+
 ## extension.js: doing it
 
 When enabled, the extension:
 
-1. **Applies the current phase:** sets GNOME's wallpaper (both the light-
-   and dark-style keys, so it shows whatever style you're in) and, if
-   you turned it on, the light/dark style.
+1. **Applies the current phase:** writes a new slideshow file to
+   `~/.local/share/dynamic-wallpaper/` and points GNOME's wallpaper at it
+   (both the light- and dark-style keys, so it shows whatever style you're
+   in). If you turned it on, it also sets the light/dark style.
 2. **Sets a timer** for the next change. The timer is capped at 5 minutes, so
    it still corrects itself if the clock or time zone changes.
 3. **Watches its settings**, and re-applies straight away when you change
@@ -84,6 +118,14 @@ It only sets the wallpaper when the phase **changes**. If you pick a
 different wallpaper in GNOME Settings by hand, it stays until the next
 sunrise or sunset.
 
+Each slideshow file gets a **new name** (`schedule-<time>.xml`): GNOME
+remembers a slideshow by its file name and never re-reads it, so rewriting
+the same file wouldn't do anything. Switching from one file to the next
+isn't visible, because both show the same picture at that moment. The
+extension keeps the current file and the one before, and deletes older ones.
+If nothing changed (for example when you log in again on the same day), it
+keeps the file it has.
+
 `disable()` removes the timer and disconnects both signals. It leaves the
 wallpaper as it is.
 
@@ -92,7 +134,8 @@ wallpaper as it is.
 Two pages, built from libadwaita rows:
 
 - **Wallpapers:** a row per image, each with a thumbnail and choose/remove
-  buttons, the sunrise/sunset switch, and the style switch.
+  buttons, the sunrise/sunset switch, how long fades last, and the style
+  switch.
 - **Schedule:** sun mode or set times. Sun mode shows the location (city
   search plus coordinates). Set-times mode shows hour and minute pickers. At
   the bottom, a **Today** preview shows when each wallpaper starts, using
@@ -119,6 +162,7 @@ all be disconnected when the window closes.
 | `wallpaper-day`, `-night`, `-sunrise`, `-sunset` | text | image file URIs |
 | `use-transitions` | yes/no | show sunrise and sunset wallpapers |
 | `transition-minutes` | number | how long each one shows |
+| `fade-minutes` | number | how long each change fades, 0 = swap straight away |
 | `switch-style` | yes/no | also switch light/dark style |
 
 You can read and change them from the terminal too, which is handy for
@@ -134,5 +178,4 @@ gsettings --schemadir src/schemas set org.gnome.shell.extensions.dynamic-wallpap
 - A "Use my current location" button (GNOME's location service, Geoclue).
 - Picking one of the light/dark wallpaper pairs from GNOME Settings as the
   day/night images.
-- A smooth cross-fade between wallpapers.
 - Translations.

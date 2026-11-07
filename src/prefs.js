@@ -103,6 +103,18 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
             settings.bind('use-transitions', row, 'sensitive', Gio.SettingsBindFlags.GET);
         page.add(transitions);
 
+        const changes = new Adw.PreferencesGroup({
+            title: 'Changing wallpaper',
+            description: 'Each change fades slowly from the old wallpaper into ' +
+                'the new one, starting at the time of the change.',
+        });
+        const fade = Adw.SpinRow.new_with_range(0, 120, 1);
+        fade.set_title('Fade lasts (minutes)');
+        fade.set_subtitle('0 swaps straight away');
+        settings.bind('fade-minutes', fade, 'value', Gio.SettingsBindFlags.DEFAULT);
+        changes.add(fade);
+        page.add(changes);
+
         const style = new Adw.PreferencesGroup({title: 'Style'});
         const switchStyle = new Adw.SwitchRow({
             title: 'Switch light and dark style too',

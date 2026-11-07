@@ -8,24 +8,36 @@
 // wallpaper too and the change should still happen on time.
 //
 // Everything enable() sets up, disable() must undo.
+//
+// The wallpaper itself is a GNOME slideshow file (see lib/slideshow.js) that
+// this extension writes and keeps up to date. GNOME picks the right picture
+// from it by the clock, even at login before this extension has started.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import {getPhase, wallpaperForPhase, Phase} from './lib/schedule.js';
+import {getPhase, Phase} from './lib/schedule.js';
+import {planSlideshow, slideshowXml} from './lib/slideshow.js';
 
 // However far away the next change is, check again at least this often.
 // It catches the clock changing, time zone changes and anything else the
 // timer can't know about.
 const MAX_WAIT_SECONDS = 5 * 60;
 
+// Slideshow files are named like this, in ~/.local/share/dynamic-wallpaper.
+// Each update gets a new name: GNOME remembers a slideshow by its file name
+// and wouldn't notice the same file being rewritten.
+const FILE_PREFIX = 'schedule-';
+const FILE_SUFFIX = '.xml';
+
 export default class DynamicWallpaperExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._background = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
         this._interface = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
+        this._dir = GLib.build_filenamev([GLib.get_user_data_dir(), 'dynamic-wallpaper']);
 
         this._timeoutId = 0;
         this._lastPhase = null;
@@ -74,6 +86,7 @@ export default class DynamicWallpaperExtension extends Extension {
         this._settings = null;
         this._background = null;
         this._interface = null;
+        this._dir = null;
         this._lastPhase = null;
     }
 
@@ -90,14 +103,19 @@ export default class DynamicWallpaperExtension extends Extension {
         };
     }
 
+    /** The chosen pictures as file paths ('' when not set). */
     _readWallpapers() {
         const s = this._settings;
+        const path = key => {
+            const uri = s.get_string(key);
+            return uri ? Gio.File.new_for_uri(uri).get_path() ?? '' : '';
+        };
         const useTransitions = s.get_boolean('use-transitions');
         return {
-            day: s.get_string('wallpaper-day'),
-            night: s.get_string('wallpaper-night'),
-            sunrise: useTransitions ? s.get_string('wallpaper-sunrise') : '',
-            sunset: useTransitions ? s.get_string('wallpaper-sunset') : '',
+            day: path('wallpaper-day'),
+            night: path('wallpaper-night'),
+            sunrise: useTransitions ? path('wallpaper-sunrise') : '',
+            sunset: useTransitions ? path('wallpaper-sunset') : '',
         };
     }
 
@@ -110,26 +128,95 @@ export default class DynamicWallpaperExtension extends Extension {
         // if you pick a different wallpaper in Settings by hand, it stays
         // until the next sunrise or sunset.
         if (phase !== this._lastPhase) {
-            this._apply(phase);
+            this._apply(now, phase);
             this._lastPhase = phase;
         }
 
         this._scheduleNext(now, nextChange);
     }
 
-    _apply(phase) {
-        const uri = wallpaperForPhase(phase, this._readWallpapers());
-        if (uri) {
-            // GNOME has separate wallpapers for light and dark style; set
-            // both so it shows whichever style is active.
-            this._setIfDifferent(this._background, 'picture-uri', uri);
-            this._setIfDifferent(this._background, 'picture-uri-dark', uri);
+    _apply(now, phase) {
+        try {
+            this._writeSlideshow(now);
+        } catch (e) {
+            console.error(`Dynamic Wallpaper: couldn't update the wallpaper: ${e.message}`);
         }
 
         if (this._settings.get_boolean('switch-style')) {
             const scheme = phase === Phase.NIGHT ? 'prefer-dark' : 'default';
             this._setIfDifferent(this._interface, 'color-scheme', scheme);
         }
+    }
+
+    /**
+     * Writes the next 24 hours as a slideshow and points the wallpaper at it.
+     * Writing it again at every change keeps it in step with the sun, which
+     * rises a minute or two earlier or later each day.
+     */
+    _writeSlideshow(now) {
+        const s = this._settings;
+        const config = this._readConfig();
+        const plan = planSlideshow(now, config, this._readWallpapers(),
+            s.get_int('fade-minutes') * 60);
+        if (!plan)
+            return; // no pictures chosen yet: leave the wallpaper alone
+
+        const xml = slideshowXml(plan);
+        const current = this._ourFile(this._background.get_string('picture-uri'));
+        if (current && this._readFile(current) === xml) {
+            this._setIfDifferent(this._background, 'picture-uri-dark',
+                this._background.get_string('picture-uri'));
+            return;
+        }
+
+        GLib.mkdir_with_parents(this._dir, 0o755);
+        const name = `${FILE_PREFIX}${Date.now()}${FILE_SUFFIX}`;
+        const path = GLib.build_filenamev([this._dir, name]);
+        GLib.file_set_contents(path, xml);
+
+        // GNOME has separate wallpapers for light and dark style; set both
+        // so it shows whichever style is active.
+        const uri = Gio.File.new_for_path(path).get_uri();
+        this._setIfDifferent(this._background, 'picture-uri', uri);
+        this._setIfDifferent(this._background, 'picture-uri-dark', uri);
+
+        // Tidy up older files. The one just replaced stays until next time,
+        // as GNOME may still be fading away from it.
+        this._removeOldFiles([name, current && GLib.path_get_basename(current)]);
+    }
+
+    /** The path if `uri` is one of our slideshow files, otherwise null. */
+    _ourFile(uri) {
+        if (!uri)
+            return null;
+        const path = Gio.File.new_for_uri(uri).get_path();
+        if (!path || GLib.path_get_dirname(path) !== this._dir)
+            return null;
+        const name = GLib.path_get_basename(path);
+        return name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX) ? path : null;
+    }
+
+    _readFile(path) {
+        try {
+            const [, bytes] = GLib.file_get_contents(path);
+            return new TextDecoder().decode(bytes);
+        } catch {
+            return null;
+        }
+    }
+
+    _removeOldFiles(keep) {
+        const dir = Gio.File.new_for_path(this._dir);
+        const children = dir.enumerate_children('standard::name',
+            Gio.FileQueryInfoFlags.NONE, null);
+        let info;
+        while ((info = children.next_file(null))) {
+            const name = info.get_name();
+            if (name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX) &&
+                !keep.includes(name))
+                dir.get_child(name).delete(null);
+        }
+        children.close(null);
     }
 
     _setIfDifferent(settings, key, value) {

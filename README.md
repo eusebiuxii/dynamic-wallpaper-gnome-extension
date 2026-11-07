@@ -6,6 +6,8 @@ A GNOME Shell extension that changes your wallpaper through the day:
   location, or at **times you choose**.
 - Optional **sunrise and sunset wallpapers**, starting at dawn and ending
   at dusk (an hour each by default).
+- **Slow fades** between wallpapers, as long as you like (15 minutes by
+  default). The right wallpaper shows from the moment you log in.
 - Find your location by **searching for a city** (works offline, using the
   same list as GNOME Weather), or type in the coordinates.
 - Optionally **switch between light and dark style** along with the
@@ -24,6 +26,7 @@ src/                     the extension itself (this folder is what gets installe
   prefs.js               the settings window
   lib/sun.js             sunrise and sunset maths
   lib/schedule.js        decides which wallpaper should show, and when
+  lib/slideshow.js       writes that as a slideshow GNOME times by itself
   schemas/*.gschema.xml  the settings the extension stores
 tests/                   tests and a settings-window preview tool
 docs/                    guides to how GNOME extensions work (start here)

@@ -142,6 +142,50 @@ export function getPhase(now, config) {
 }
 
 /**
+ * One full 24-hour cycle of phases, starting at the most recent change at or
+ * before `now`. Used to build the GNOME slideshow (see slideshow.js), which
+ * repeats every 24 hours by itself.
+ *
+ * Starting at a change (rather than at midnight) means every fade begins
+ * inside the cycle, never wrapping across its end.
+ *
+ * @returns {{start: Date, segments: {phase: string, start: Date, end: Date}[]}}
+ */
+export function getCycle(now, config) {
+    // Keep only real changes: polar days and nights repeat the same phase.
+    const changes = [];
+    for (const event of eventsAround(now, config)) {
+        if (!changes.length || changes[changes.length - 1].phase !== event.phase)
+            changes.push(event);
+    }
+
+    let first = 0;
+    for (let i = 0; i < changes.length; i++) {
+        if (changes[i].time <= now)
+            first = i;
+    }
+
+    const start = changes[first].time;
+    const end = new Date(start.getTime() + 24 * 60 * MINUTE);
+    const segments = [];
+    // Stop when the first phase comes round again: tomorrow's sunrise can
+    // be a few minutes earlier than today's, which would otherwise squeeze
+    // in a few minutes of it at the end.
+    for (let i = first; i < changes.length && changes[i].time < end &&
+        (i === first || changes[i].phase !== changes[first].phase); i++) {
+        const next = changes[i + 1]?.time;
+        segments.push({
+            phase: changes[i].phase,
+            start: changes[i].time,
+            end: next && next < end ? next : end,
+        });
+    }
+    // The last phase runs until the cycle starts again.
+    segments[segments.length - 1].end = end;
+    return {start, segments};
+}
+
+/**
  * Today's phase changes, for showing in the settings window.
  *
  * @returns {{polar: string | null, events: {time: Date, phase: string}[]}}
