@@ -174,6 +174,17 @@ function listImages(folderUri) {
 
 const basename = uri => Gio.File.new_for_uri(uri).get_basename();
 
+/**
+ * Fades a widget while it's greyed out. GTK already dims greyed-out text,
+ * but not pictures or custom drawing, so thumbnails and the clock would stay
+ * bright without this.
+ */
+export function fadeWhenOff(widget) {
+    const sync = () => widget.set_opacity(widget.get_sensitive() ? 1 : 0.55);
+    widget.connect('notify::sensitive', sync);
+    sync();
+}
+
 // ------------------------------------------------------------------- Page
 
 /**
@@ -203,17 +214,21 @@ export function buildDynamicSetPage(window, settings, watch) {
 
     const use = new Adw.SwitchRow({
         title: 'Use the dynamic set',
-        subtitle: 'Instead of the day and night wallpapers on the Wallpapers tab',
+        subtitle: 'Instead of the day and night wallpapers on the Wallpapers tab. ' +
+            'Turn it on to set up the pictures below.',
     });
     settings.bind('use-set', use, 'active', Gio.SettingsBindFlags.DEFAULT);
     top.add(use);
+    page.add(top);
 
+    // Everything below is greyed out while the set isn't in use.
+    const options = new Adw.PreferencesGroup();
     const modeRow = new Adw.ActionRow({title: 'Schedule by'});
     const modes = new Adw.ToggleGroup({valign: Gtk.Align.CENTER});
     modes.add(new Adw.Toggle({name: 'time', label: 'Time of day'}));
     modes.add(new Adw.Toggle({name: 'sun', label: 'Sun'}));
     modeRow.add_suffix(modes);
-    top.add(modeRow);
+    options.add(modeRow);
 
     const syncMode = () => {
         const mode = settings.get_string('set-mode');
@@ -237,8 +252,8 @@ export function buildDynamicSetPage(window, settings, watch) {
     watch('changed::location-name', syncMode);
     syncMode();
 
-    top.add(folderRow(window, settings, watch));
-    page.add(top);
+    options.add(folderRow(window, settings, watch));
+    page.add(options);
 
     // --- The clock
     const clockGroup = new Adw.PreferencesGroup();
@@ -298,6 +313,11 @@ export function buildDynamicSetPage(window, settings, watch) {
     settings.bind('fade-minutes', fade, 'value', Gio.SettingsBindFlags.DEFAULT);
     changes.add(fade);
     page.add(changes);
+
+    for (const group of [options, clockGroup, below, changes]) {
+        settings.bind('use-set', group, 'sensitive', Gio.SettingsBindFlags.GET);
+        fadeWhenOff(group);
+    }
 
     window.connect('close-request', () => {
         clock.destroy();

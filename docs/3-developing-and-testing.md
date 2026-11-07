@@ -61,7 +61,7 @@ LD_LIBRARY_PATH=/usr/lib64/gnome-shell \
   gjs -m tests/prefs-window.js --page schedule --set "mode='fixed'" --search york
 ```
 
-- `--page wallpapers|dynamic-set|schedule`: which page to open on
+- `--page wallpapers|dynamic-set|theme|schedule`: which page to open on
 - `--set key=value`: start with a setting changed (value in GVariant format:
   `true`, `120`, `'text'`)
 - `--search text`: type into the city search

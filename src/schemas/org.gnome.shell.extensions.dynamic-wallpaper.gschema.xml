@@ -103,8 +103,28 @@
     <!-- Style -->
     <key name="switch-style" type="b">
       <default>false</default>
-      <summary>Also switch between light and dark style</summary>
-      <description>Light style during the day, dark at night. Off leaves the style alone.</description>
+      <summary>Switch between light and dark style</summary>
+      <description>Light style during the day, dark at night (see style-mode). Off leaves the style alone.</description>
+    </key>
+    <key name="style-mode" type="s">
+      <choices>
+        <choice value="sun"/>
+        <choice value="twilight"/>
+        <choice value="fixed"/>
+      </choices>
+      <default>'sun'</default>
+      <summary>When the style is dark</summary>
+      <description>'sun': from sunset to sunrise. 'twilight': from dusk to dawn (a little later and earlier). 'fixed': from style-night-start to style-day-start. Uses the same location as the wallpapers.</description>
+    </key>
+    <key name="style-day-start" type="i">
+      <range min="0" max="1439"/>
+      <default>420</default>
+      <summary>When light style starts in 'fixed' style mode, in minutes after midnight</summary>
+    </key>
+    <key name="style-night-start" type="i">
+      <range min="0" max="1439"/>
+      <default>1200</default>
+      <summary>When dark style starts in 'fixed' style mode, in minutes after midnight</summary>
     </key>
   </schema>
 </schemalist>

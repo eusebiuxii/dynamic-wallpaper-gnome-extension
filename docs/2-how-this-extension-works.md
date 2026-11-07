@@ -60,8 +60,10 @@ With sunrise and sunset wallpapers on:
 Without sunrise and sunset wallpapers, day and night switch at sunrise and
 sunset.
 
-With the style switch on, dark style starts when the night wallpaper does,
-i.e. at dusk.
+The light/dark style has its own schedule (Theme tab), worked out with the
+same `getPhase()`: the style is dark during its night phase. "Sunset to
+sunrise" is a sun config without transitions, "dusk to dawn" one with them,
+and "set times" a fixed config with its own two times.
 
 `wallpaperForPhase()` picks the image. A missing sunrise or sunset image
 falls back to the day one.
@@ -114,7 +116,9 @@ When enabled, the extension:
 1. **Applies the current phase:** writes a new slideshow file to
    `~/.local/share/dynamic-wallpaper/` and points GNOME's wallpaper at it
    (both the light- and dark-style keys, so it shows whatever style you're
-   in). If you turned it on, it also sets the light/dark style.
+   in). If you turned it on, it also sets the light/dark style, on its own
+   schedule. Wallpaper and style are tracked separately, so each only
+   changes when it needs to.
 2. **Sets a timer** for the next change. The timer is capped at 5 minutes, so
    it still corrects itself if the clock or time zone changes.
 3. **Watches its settings**, and re-applies straight away when you change
@@ -139,12 +143,17 @@ wallpaper as it is.
 
 ## prefs.js: the settings window
 
-Three pages, mostly built from libadwaita rows (the Dynamic set page, in
+Four pages, in this order: Wallpapers, Dynamic set, Theme, Schedule. They're
+mostly built from libadwaita rows (the Dynamic set page, in
 `dynamicSetPage.js`, is described in [guide 5](5-dynamic-set.md)):
 
 - **Wallpapers:** a row per image, each with a thumbnail and choose/remove
-  buttons, the sunrise/sunset switch, how long fades last, and the style
-  switch.
+  buttons, the sunrise/sunset switch, and how long fades last. Greyed out
+  (with a banner and a "Use these instead" button) while the dynamic set is
+  in use. The Dynamic set page is greyed out the other way round, apart
+  from its on/off switch, so it's always clear which one is in use.
+  `fadeWhenOff()` also fades greyed-out pictures and the clock, which GTK
+  doesn't dim by itself.
 - **Schedule:** sun mode or set times. Sun mode shows the location (city
   search plus coordinates). Set-times mode shows hour and minute pickers. At
   the bottom, a **Today** preview lists every wallpaper that shows today:
@@ -153,7 +162,12 @@ Three pages, mostly built from libadwaita rows (the Dynamic set page, in
   rows for the day/night wallpapers, or one row per picture (by label, or by
   file name in time mode) for the dynamic set. It uses the same `lib/` code
   as the extension, so it always matches what will happen, and updates every
-  minute while the window is open.
+  minute while the window is open. "Change the wallpaper" and the set times
+  are greyed out while the dynamic set is in use, since they only apply to
+  the day/night wallpapers.
+- **Theme:** light/dark style switching, off by default. When it's dark: sunset to
+  sunrise, dusk to dawn, or set times (its own, separate from the
+  wallpapers'). A small Today preview shows when light and dark start.
 
 The city search uses **libgweather**, the offline list of places behind
 GNOME Weather and Clocks, so no internet or API key is needed. The list is
@@ -176,7 +190,9 @@ all be disconnected when the window closes.
 | `use-transitions` | yes/no | show sunrise and sunset wallpapers |
 | `transition-minutes` | number | how long each one shows |
 | `fade-minutes` | number | how long each change fades, 0 = swap straight away |
-| `switch-style` | yes/no | also switch light/dark style |
+| `switch-style` | yes/no | switch light/dark style (Theme tab) |
+| `style-mode` | text | `sun` (sunset → sunrise), `twilight` (dusk → dawn) or `fixed` |
+| `style-day-start`, `style-night-start` | number | the style's set times, in minutes after midnight |
 | `use-set`, `set-mode`, `set-folder`, `set-images` | | the dynamic set, see [guide 5](5-dynamic-set.md) |
 
 You can read and change them from the terminal too, which is handy for

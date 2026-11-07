@@ -42,10 +42,12 @@ export default class DynamicWallpaperExtension extends Extension {
 
         this._timeoutId = 0;
         this._lastPhase = null;
+        this._lastDark = null;
 
         // Any change in our settings: re-apply straight away.
         this._settingsChangedId = this._settings.connect('changed', () => {
             this._lastPhase = null;
+            this._lastDark = null;
             this._update();
         });
 
@@ -89,6 +91,7 @@ export default class DynamicWallpaperExtension extends Extension {
         this._interface = null;
         this._dir = null;
         this._lastPhase = null;
+        this._lastDark = null;
     }
 
     _readConfig() {
@@ -139,45 +142,73 @@ export default class DynamicWallpaperExtension extends Extension {
         };
     }
 
-    /** Apply the current phase (if it changed) and set the next timer. */
+    /**
+     * When the light/dark style switches, as a schedule.js config: the style
+     * is dark during its night phase. It has its own setting, separate from
+     * the wallpapers (Theme tab), but uses the same location.
+     */
+    _readStyleConfig() {
+        const s = this._settings;
+        const styleMode = s.get_string('style-mode');
+        return {
+            mode: styleMode === 'fixed' ? 'fixed' : 'sun',
+            latitude: s.get_double('latitude'),
+            longitude: s.get_double('longitude'),
+            dayStart: s.get_int('style-day-start'),
+            nightStart: s.get_int('style-night-start'),
+            // With "transitions", night runs from dusk to dawn.
+            transitions: styleMode === 'twilight',
+            transitionMinutes: 60,
+        };
+    }
+
+    /** Apply whatever changed (wallpaper and/or style) and set the next timer. */
     _update() {
         const now = new Date();
-        // The day/night phase drives the light/dark style, and the
-        // wallpaper too unless the dynamic set is in use.
-        const {phase, nextChange} = getPhase(now, this._readConfig());
-        let key = phase;
-        let next = nextChange;
+        let next = null;
+        const sooner = time => {
+            if (time && (!next || time < next))
+                next = time;
+        };
 
+        // Which picture should show: from the dynamic set if it's in use,
+        // otherwise the day/night phase.
+        let wallpaperKey;
         const set = this._readSet();
         if (set) {
             const picture = phaseFromEvents(now, setEvents(now, set));
-            key = `${phase} ${picture.phase}`;
-            if (picture.nextChange && (!next || picture.nextChange < next))
-                next = picture.nextChange;
+            wallpaperKey = `set ${picture.phase}`;
+            sooner(picture.nextChange);
+        } else {
+            const {phase, nextChange} = getPhase(now, this._readConfig());
+            wallpaperKey = phase;
+            sooner(nextChange);
         }
 
-        // Only touch the wallpaper when something actually changes. That way
-        // if you pick a different wallpaper in Settings by hand, it stays
-        // until the next change.
-        if (key !== this._lastPhase) {
-            this._apply(now, phase);
-            this._lastPhase = key;
+        // Light or dark style, if that's switched on.
+        let dark = null;
+        if (this._settings.get_boolean('switch-style')) {
+            const {phase, nextChange} = getPhase(now, this._readStyleConfig());
+            dark = phase === Phase.NIGHT;
+            sooner(nextChange);
         }
+
+        // Only touch things when they actually change. That way if you pick
+        // a different wallpaper or style by hand, it stays until the next
+        // change.
+        if (wallpaperKey !== this._lastPhase) {
+            try {
+                this._writeSlideshow(now);
+            } catch (e) {
+                console.error(`Dynamic Wallpaper: couldn't update the wallpaper: ${e.message}`);
+            }
+            this._lastPhase = wallpaperKey;
+        }
+        if (dark !== null && dark !== this._lastDark)
+            this._setIfDifferent(this._interface, 'color-scheme', dark ? 'prefer-dark' : 'default');
+        this._lastDark = dark;
 
         this._scheduleNext(now, next);
-    }
-
-    _apply(now, phase) {
-        try {
-            this._writeSlideshow(now);
-        } catch (e) {
-            console.error(`Dynamic Wallpaper: couldn't update the wallpaper: ${e.message}`);
-        }
-
-        if (this._settings.get_boolean('switch-style')) {
-            const scheme = phase === Phase.NIGHT ? 'prefer-dark' : 'default';
-            this._setIfDifferent(this._interface, 'color-scheme', scheme);
-        }
     }
 
     /**

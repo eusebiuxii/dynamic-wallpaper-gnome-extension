@@ -18,7 +18,7 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 import {getTodaysEvents, getPhase, Phase, startOfDay, wallpaperForPhase} from './lib/schedule.js';
 import {entryTimes, labelText, parseEntries, setEvents} from './lib/dynamicSet.js';
-import {buildDynamicSetPage} from './dynamicSetPage.js';
+import {buildDynamicSetPage, fadeWhenOff} from './dynamicSetPage.js';
 
 const PHASE_LABELS = {
     [Phase.NIGHT]: 'Night',
@@ -28,6 +28,7 @@ const PHASE_LABELS = {
 };
 
 const MODES = ['sun', 'fixed'];
+const STYLE_MODES = ['sun', 'twilight', 'fixed'];
 
 /**
  * A picture that's always 72×46, whatever the image's shape. A plain
@@ -63,6 +64,7 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
 
         window.add(this._buildWallpapersPage(window, settings));
         window.add(buildDynamicSetPage(window, settings, this._watch));
+        window.add(this._buildStylePage(settings));
         window.add(this._buildSchedulePage(settings));
     }
 
@@ -127,15 +129,13 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         changes.add(fade);
         page.add(changes);
 
-        const style = new Adw.PreferencesGroup({title: 'Style'});
-        const switchStyle = new Adw.SwitchRow({
-            title: 'Switch light and dark style too',
-            subtitle: 'Light style during the day, dark at night. Leave off to keep ' +
-                'your current style and only change the wallpaper.',
-        });
-        settings.bind('switch-style', switchStyle, 'active', Gio.SettingsBindFlags.DEFAULT);
-        style.add(switchStyle);
-        page.add(style);
+        // Greyed out while the dynamic set is in use (the banner above
+        // says so, with a button to switch back).
+        for (const group of [main, transitions, changes]) {
+            settings.bind('use-set', group, 'sensitive',
+                Gio.SettingsBindFlags.GET | Gio.SettingsBindFlags.INVERT_BOOLEAN);
+            fadeWhenOff(group);
+        }
 
         return page;
     }
@@ -160,6 +160,9 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         page.add(when);
 
         const location = this._buildLocationGroup(settings);
+        location.set_description('Sunrise and sunset are worked out from this, for the ' +
+            'wallpapers and the light/dark style. Search for a town or city near you, ' +
+            'or type in the coordinates.');
         const times = this._buildTimesGroup(settings);
         page.add(location);
         page.add(times);
@@ -188,9 +191,12 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
             location.set_visible(isSun || (useSet && settings.get_string('set-mode') === 'sun'));
             times.set_visible(!isSun);
             mode.set_selected(MODES.indexOf(settings.get_string('mode')));
+            // These only apply to the day and night wallpapers.
+            when.set_sensitive(!useSet);
+            times.set_sensitive(!useSet);
             when.set_description(useSet
-                ? 'The dynamic set has its own times (Dynamic set tab). This still ' +
-                  'decides when the light and dark style switch, if that’s on.'
+                ? 'The dynamic set is in use and has its own times (Dynamic set tab), ' +
+                  'so this only applies to the day and night wallpapers.'
                 : '');
         };
 
@@ -215,6 +221,110 @@ export default class DynamicWallpaperPreferences extends ExtensionPreferences {
         syncMode();
         refreshPreview();
         return page;
+    }
+
+    _buildStylePage(settings) {
+        const page = new Adw.PreferencesPage({
+            name: 'theme',
+            title: 'Theme',
+            icon_name: 'weather-clear-night-symbolic',
+        });
+
+        const main = new Adw.PreferencesGroup({
+            title: 'Light and dark style',
+            description: 'Optionally switch GNOME between light style during the day ' +
+                'and dark style at night. Off by default: your style is left as it is.',
+        });
+        const enable = new Adw.SwitchRow({title: 'Switch light and dark style'});
+        settings.bind('switch-style', enable, 'active', Gio.SettingsBindFlags.DEFAULT);
+        main.add(enable);
+        page.add(main);
+
+        const when = new Adw.PreferencesGroup({
+            title: 'When it’s dark',
+            description: 'Sunrise, sunset, dawn and dusk use the location on the Schedule tab.',
+        });
+        const choice = new Adw.ComboRow({
+            title: 'Dark style',
+            model: Gtk.StringList.new(['From sunset to sunrise', 'From dusk to dawn', 'At set times']),
+        });
+        const syncChoice = () => {
+            const index = STYLE_MODES.indexOf(settings.get_string('style-mode'));
+            if (choice.get_selected() !== index)
+                choice.set_selected(Math.max(0, index));
+            const place = settings.get_string('location-name') || 'your location';
+            choice.set_subtitle(settings.get_string('style-mode') === 'fixed' ? ''
+                : GLib.markup_escape_text(`At ${place}`, -1));
+            times.set_visible(settings.get_string('style-mode') === 'fixed');
+        };
+        choice.connect('notify::selected', () =>
+            settings.set_string('style-mode', STYLE_MODES[choice.get_selected()]));
+        when.add(choice);
+        page.add(when);
+
+        const times = new Adw.PreferencesGroup();
+        times.add(this._timeRow(settings, 'style-day-start', 'Light style from'));
+        times.add(this._timeRow(settings, 'style-night-start', 'Dark style from'));
+        page.add(times);
+
+        const today = new Adw.PreferencesGroup({title: 'Today'});
+        page.add(today);
+        let rows = [];
+        const refresh = () => {
+            rows.forEach(row => today.remove(row));
+            rows = this._stylePreviewRows(settings);
+            rows.forEach(row => today.add(row));
+        };
+
+        for (const group of [when, times, today])
+            settings.bind('switch-style', group, 'sensitive', Gio.SettingsBindFlags.GET);
+        this._watch('changed', (_s, key) => {
+            if (['style-mode', 'location-name'].includes(key))
+                syncChoice();
+            refresh();
+        });
+        syncChoice();
+        refresh();
+        return page;
+    }
+
+    _stylePreviewRows(settings) {
+        const styleMode = settings.get_string('style-mode');
+        const config = {
+            mode: styleMode === 'fixed' ? 'fixed' : 'sun',
+            latitude: settings.get_double('latitude'),
+            longitude: settings.get_double('longitude'),
+            dayStart: settings.get_int('style-day-start'),
+            nightStart: settings.get_int('style-night-start'),
+            transitions: styleMode === 'twilight',
+            transitionMinutes: 60,
+        };
+        const now = new Date();
+        const dark = getPhase(now, config).phase === Phase.NIGHT;
+        const rows = [];
+        const row = (title, value, isNow) => {
+            const r = new Adw.ActionRow({title});
+            if (isNow) {
+                r.add_suffix(new Gtk.Label({label: 'Now', valign: Gtk.Align.CENTER,
+                    css_classes: ['accent', 'heading']}));
+            }
+            r.add_suffix(new Gtk.Label({label: value, valign: Gtk.Align.CENTER,
+                css_classes: isNow ? ['numeric'] : ['dim-label', 'numeric']}));
+            return r;
+        };
+
+        const {polar, events} = getTodaysEvents(now, config);
+        if (polar) {
+            rows.push(row(polar === 'day' ? 'Light style' : 'Dark style', 'all day', true));
+            return rows;
+        }
+        const light = events.find(e => e.phase !== Phase.NIGHT)?.time;
+        const night = events.find(e => e.phase === Phase.NIGHT)?.time;
+        if (light)
+            rows.push(row('Light style', `from ${formatTime(light)}`, !dark));
+        if (night)
+            rows.push(row('Dark style', `from ${formatTime(night)}`, dark));
+        return rows;
     }
 
     // ------------------------------------------------------------- Location
@@ -599,6 +709,7 @@ function previewRow({uri, title, subtitle = null, times, now = false, earlier = 
 }
 
 // ------------------------------------------------------------------ Helpers
+
 
 /**
  * A small thumbnail of an image. Loading it scaled down keeps memory low:

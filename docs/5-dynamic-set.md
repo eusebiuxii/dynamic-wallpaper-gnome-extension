@@ -16,16 +16,19 @@ Added 2026-11-07. Still being tried out, so expect changes.
    opens. A grid can still open the file picker with **Browse…**.
 4. **Click the track** where you want a picture to start, and pick the
    picture.
-5. Turn on **Use the dynamic set**. While it's on, the Wallpapers tab shows a
-   banner saying its pictures aren't being used, with a button to switch
-   back.
+5. Turn on **Use the dynamic set**. While it's on, the Wallpapers tab is
+   greyed out, with a banner saying its pictures aren't being used and a
+   button to switch back. While it's off, this tab is greyed out instead
+   (apart from the switch), so it's always clear which one is in use. Turn
+   it on to set up pictures.
 
-The light/dark style switch (Wallpapers tab) and the location (Schedule tab)
+The light/dark style (its own Theme tab) and the location (Schedule tab)
 work the same with either. The **Today** list at the bottom of the Schedule
 tab shows the set's pictures for today, in order, with thumbnails, labels,
 the times each shows and which one is showing now. With a sun-scheduled set,
-the location stays visible there even if "At set times" is chosen (that
-choice then only decides when the light/dark style switches).
+the location stays visible there even if "At set times" is chosen; that
+choice, and "Change the wallpaper", are greyed out while the set is in use,
+since they only apply to the day/night wallpapers.
 
 ## The clock
 
@@ -188,7 +191,8 @@ Code:
   per minute, and a click finds the nearest one.
 - `src/extension.js`: when **Use the dynamic set** is on, it writes the set's
   slideshow instead of the day/night one. Everything else (new file name per
-  change, keeping the light/dark style in step) is unchanged.
+  change) is unchanged. The light/dark style follows its own schedule from
+  the Theme tab, whichever wallpapers are in use.
 
 The wallpaper is still a **GNOME slideshow file**, as explained in
 [guide 2](2-how-this-extension-works.md). With 16 pictures it simply lists 16

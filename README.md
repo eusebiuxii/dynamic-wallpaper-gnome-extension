@@ -13,8 +13,9 @@ A GNOME Shell extension that changes your wallpaper through the day:
 - A **Dynamic set** tab for any number of pictures (8, 16, 24…) placed
   around a 24-hour clock, by time of day or by the sun's position (so they
   follow the seasons). See [docs/5](docs/5-dynamic-set.md).
-- Optionally **switch between light and dark style** along with the
-  wallpaper. Leave it off to keep your style and only change the wallpaper.
+- Optionally **switch between light and dark style** (its own Theme tab,
+  off by default): dark from sunset to sunrise, from dusk to dawn, or at
+  set times.
 
 Made for GNOME 49–51 (developed on Fedora 45 with GNOME 51).
 
