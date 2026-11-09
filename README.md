@@ -17,6 +17,15 @@ A GNOME Shell extension that changes your wallpaper through the day:
   off by default): dark from sunset to sunrise, from dusk to dawn, or at
   set times.
 
+<p align="center">
+  <img src="docs/images/dynamic-set.png" width="560"
+       alt="The Dynamic set tab: sixteen Mojave pictures placed around a 24-hour clock that follows the sun">
+</p>
+
+| Wallpapers | Schedule | Theme |
+| --- | --- | --- |
+| ![Day, night, sunrise and sunset wallpapers](docs/images/wallpapers.png) | ![Location search and today's timetable](docs/images/schedule.png) | ![Switching between light and dark style](docs/images/theme.png) |
+
 Made for GNOME 49–51 (developed on Fedora 45 with GNOME 51).
 
 **Where it's up to, and what's next:** see [STATUS.md](STATUS.md).
