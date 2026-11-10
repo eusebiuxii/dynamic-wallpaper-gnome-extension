@@ -1,5 +1,6 @@
 # Dynamic Wallpaper
 
+Complete transparency: This was made with the help of Claude
 A GNOME Shell extension that changes your wallpaper through the day:
 
 - **Day and night wallpapers**, switched at **sunrise and sunset** for your
