@@ -22,7 +22,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {getPhase, phaseFromEvents, Phase} from './lib/schedule.js';
 import {planSlideshow, slideshowXml} from './lib/slideshow.js';
 import {parseEntries, planSetSlideshow, setEvents} from './lib/dynamicSet.js';
-import {removeUnusedCopies, scaledCopy, screenSize} from './lib/scaledCopies.js';
+import {call, removeUnusedCopies, scaledCopy, screenSize} from './lib/scaledCopies.js';
 
 // However far away the next change is, check again at least this often.
 // It catches the clock changing, time zone changes and anything else the
@@ -78,11 +78,13 @@ export default class DynamicWallpaperExtension extends Extension {
         this._update();
     }
 
-    // This extension uses the 'unlock-dialog' session mode: it keeps running
-    // while the screen is locked, because the lock screen shows the desktop
-    // wallpaper and a sunrise or sunset change should still happen on time.
-    // It adds nothing to the lock screen itself.
     disable() {
+        // This extension uses the 'unlock-dialog' session mode: it keeps
+        // running while the screen is locked, because the lock screen shows
+        // the desktop wallpaper and a sunrise or sunset change should still
+        // happen on time. It adds nothing to the lock screen itself, so
+        // there's nothing extra to undo here for it.
+
         // Stop any slideshow still being prepared.
         this._writeSerial++;
         this._cancellable.cancel();
@@ -269,7 +271,9 @@ export default class DynamicWallpaperExtension extends Extension {
 
         const xml = slideshowXml(plan);
         const current = this._ourFile(this._background.get_string('picture-uri'));
-        const currentXml = current ? this._readFile(current) : null;
+        const currentXml = current ? await this._readFile(current) : null;
+        if (serial !== this._writeSerial)
+            return;
         if (currentXml === xml) {
             this._setIfDifferent(this._background, 'picture-uri-dark',
                 this._background.get_string('picture-uri'));
@@ -279,7 +283,13 @@ export default class DynamicWallpaperExtension extends Extension {
         GLib.mkdir_with_parents(this._dir, 0o755);
         const name = `${FILE_PREFIX}${Date.now()}${FILE_SUFFIX}`;
         const path = GLib.build_filenamev([this._dir, name]);
-        GLib.file_set_contents(path, xml);
+        await call(
+            cb => Gio.File.new_for_path(path).replace_contents_bytes_async(
+                new GLib.Bytes(new TextEncoder().encode(xml)), null, false,
+                Gio.FileCreateFlags.REPLACE_DESTINATION, this._cancellable, cb),
+            (f, res) => f.replace_contents_finish(res));
+        if (serial !== this._writeSerial)
+            return;
 
         // GNOME has separate wallpapers for light and dark style; set both
         // so it shows whichever style is active.
@@ -311,11 +321,16 @@ export default class DynamicWallpaperExtension extends Extension {
         return name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX) ? path : null;
     }
 
-    _readFile(path) {
+    /** The file's text, or null if it can't be read. */
+    async _readFile(path) {
         try {
-            const [, bytes] = GLib.file_get_contents(path);
+            const [bytes] = await call(
+                cb => Gio.File.new_for_path(path).load_contents_async(this._cancellable, cb),
+                (f, res) => f.load_contents_finish(res));
             return new TextDecoder().decode(bytes);
-        } catch {
+        } catch (e) {
+            if (e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                throw e;
             return null;
         }
     }

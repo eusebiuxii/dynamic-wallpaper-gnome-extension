@@ -23,7 +23,7 @@ const MIN_SHRINK = 1.15;
 
 const JPEG_QUALITY = '92';
 
-function call(start, finish) {
+export function call(start, finish) {
     return new Promise((resolve, reject) => {
         start((source, result) => {
             try {
