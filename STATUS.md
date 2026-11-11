@@ -45,6 +45,11 @@ Where the project is up to. Last updated 2026-11-07.
   - keeps running on the lock screen (`unlock-dialog`);
   - re-checks on wake from sleep;
   - only changes the wallpaper/style when they need to change.
+  - slideshow uses screen-sized copies of the pictures
+    (`lib/scaledCopies.js`, in `~/.cache/dynamic-wallpaper/scaled`), made
+    async; a 6K picture goes from ~145 MB decoded to ~15 MB. Wallpaper keys
+    are written in one batch, so GNOME reloads it once (2026-11-10, not yet
+    tested in a real session).
 - Tests: `make test`, 56 passing. One older sun test ("New York,
   midsummer") fails when the computer's time zone is far east (Tokyo,
   Sydney); this is a quirk of the test, not the maths. Sun times are

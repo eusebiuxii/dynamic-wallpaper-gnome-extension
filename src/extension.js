@@ -17,10 +17,12 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {getPhase, phaseFromEvents, Phase} from './lib/schedule.js';
 import {planSlideshow, slideshowXml} from './lib/slideshow.js';
 import {parseEntries, planSetSlideshow, setEvents} from './lib/dynamicSet.js';
+import {removeUnusedCopies, scaledCopy, screenSize} from './lib/scaledCopies.js';
 
 // However far away the next change is, check again at least this often.
 // It catches the clock changing, time zone changes and anything else the
@@ -39,8 +41,11 @@ export default class DynamicWallpaperExtension extends Extension {
         this._background = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
         this._interface = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
         this._dir = GLib.build_filenamev([GLib.get_user_data_dir(), 'dynamic-wallpaper']);
+        this._cacheDir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'dynamic-wallpaper', 'scaled']);
+        this._cancellable = new Gio.Cancellable();
 
         this._timeoutId = 0;
+        this._writeSerial = 0;
         this._lastPhase = null;
         this._lastDark = null;
 
@@ -63,6 +68,13 @@ export default class DynamicWallpaperExtension extends Extension {
                     this._update();
             });
 
+        // A different screen size needs different-sized copies of the
+        // pictures (see lib/scaledCopies.js).
+        this._monitorsChangedId = Main.layoutManager.connect('monitors-changed', () => {
+            this._lastPhase = null;
+            this._update();
+        });
+
         this._update();
     }
 
@@ -71,6 +83,15 @@ export default class DynamicWallpaperExtension extends Extension {
     // wallpaper and a sunrise or sunset change should still happen on time.
     // It adds nothing to the lock screen itself.
     disable() {
+        // Stop any slideshow still being prepared.
+        this._writeSerial++;
+        this._cancellable.cancel();
+        this._cancellable = null;
+
+        if (this._monitorsChangedId) {
+            Main.layoutManager.disconnect(this._monitorsChangedId);
+            this._monitorsChangedId = 0;
+        }
         if (this._timeoutId) {
             GLib.source_remove(this._timeoutId);
             this._timeoutId = 0;
@@ -90,6 +111,7 @@ export default class DynamicWallpaperExtension extends Extension {
         this._background = null;
         this._interface = null;
         this._dir = null;
+        this._cacheDir = null;
         this._lastPhase = null;
         this._lastDark = null;
     }
@@ -199,11 +221,10 @@ export default class DynamicWallpaperExtension extends Extension {
         // a different wallpaper or style by hand, it stays until the next
         // change.
         if (wallpaperKey !== this._lastPhase) {
-            try {
-                this._writeSlideshow(now);
-            } catch (e) {
-                console.error(`Dynamic Wallpaper: couldn't update the wallpaper: ${e.message}`);
-            }
+            this._writeSlideshow(now).catch(e => {
+                if (!e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                    console.error(`Dynamic Wallpaper: couldn't update the wallpaper: ${e.message}`);
+            });
             this._lastPhase = wallpaperKey;
         }
         if (dark !== null && dark !== this._lastDark)
@@ -217,8 +238,13 @@ export default class DynamicWallpaperExtension extends Extension {
      * Writes the next 24 hours as a slideshow and points the wallpaper at it.
      * Writing it again at every change keeps it in step with the sun, which
      * rises a minute or two earlier or later each day.
+     *
+     * The slideshow uses screen-sized copies of the pictures, made first if
+     * they aren't there yet. That takes a moment, so it's async; if another
+     * update or disable() comes along meanwhile, this one gives up.
      */
-    _writeSlideshow(now) {
+    async _writeSlideshow(now) {
+        const serial = ++this._writeSerial;
         const fadeSeconds = this._settings.get_int('fade-minutes') * 60;
         const set = this._readSet();
         const plan = set
@@ -227,9 +253,24 @@ export default class DynamicWallpaperExtension extends Extension {
         if (!plan)
             return; // no pictures chosen yet: leave the wallpaper alone
 
+        // One at a time, so a new set of pictures doesn't start a dozen
+        // decoders at once.
+        const screen = screenSize();
+        const copies = new Map();
+        for (const slide of plan.slides) {
+            if (!copies.has(slide.file)) {
+                copies.set(slide.file,
+                    await scaledCopy(slide.file, screen, this._cacheDir, this._cancellable));
+                if (serial !== this._writeSerial)
+                    return;
+            }
+        }
+        plan.slides = plan.slides.map(slide => ({...slide, file: copies.get(slide.file)}));
+
         const xml = slideshowXml(plan);
         const current = this._ourFile(this._background.get_string('picture-uri'));
-        if (current && this._readFile(current) === xml) {
+        const currentXml = current ? this._readFile(current) : null;
+        if (currentXml === xml) {
             this._setIfDifferent(this._background, 'picture-uri-dark',
                 this._background.get_string('picture-uri'));
             return;
@@ -242,13 +283,21 @@ export default class DynamicWallpaperExtension extends Extension {
 
         // GNOME has separate wallpapers for light and dark style; set both
         // so it shows whichever style is active.
+        // Both keys in one go: GNOME and every extension drawing the
+        // wallpaper reload it on each change, so this makes it one reload.
         const uri = Gio.File.new_for_path(path).get_uri();
-        this._setIfDifferent(this._background, 'picture-uri', uri);
-        this._setIfDifferent(this._background, 'picture-uri-dark', uri);
+        // (A separate object: delay() can't be switched off again.)
+        const batch = new Gio.Settings({schema_id: 'org.gnome.desktop.background'});
+        batch.delay();
+        this._setIfDifferent(batch, 'picture-uri', uri);
+        this._setIfDifferent(batch, 'picture-uri-dark', uri);
+        batch.apply();
 
         // Tidy up older files. The one just replaced stays until next time,
-        // as GNOME may still be fading away from it.
+        // as GNOME may still be fading away from it (and so do its copies).
         this._removeOldFiles([name, current && GLib.path_get_basename(current)]);
+        removeUnusedCopies(this._cacheDir, copy =>
+            xml.includes(copy) || (currentXml?.includes(copy) ?? false));
     }
 
     /** The path if `uri` is one of our slideshow files, otherwise null. */
